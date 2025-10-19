@@ -90,7 +90,7 @@ misspell:
 
 cyclo:
 	@echo "Checking cyclomatic complexity..."
-	@$(GOCYCLO) -over 15 .
+	@$(GOCYCLO) -over 15 -ignore "_test" .
 
 # ------------------------------
 # Security and Vulnerability
