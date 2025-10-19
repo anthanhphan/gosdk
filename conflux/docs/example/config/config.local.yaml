@@ -1,0 +1,10 @@
+server:
+  port: 8080
+  name: example
+
+logger:
+  level: debug
+  encoding: json
+  disable_caller: false
+  disable_stacktrace: false
+  is_development: true
