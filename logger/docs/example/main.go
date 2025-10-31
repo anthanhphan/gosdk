@@ -27,5 +27,5 @@ func main() {
 		zap.String("service", "user-service"),
 		zap.String("version", "1.0.0"),
 	)
-	serviceLog.Info("User created, user_id: %d, email: %s", 12345, "user@example.com")
+	serviceLog.Infof("User created, user_id: %d, email: %s", 12345, "user@example.com")
 }

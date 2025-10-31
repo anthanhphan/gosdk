@@ -3,6 +3,7 @@
 package logger
 
 import (
+	"strings"
 	"testing"
 
 	"go.uber.org/zap"
@@ -300,6 +301,70 @@ func TestGetEncodeLevel(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			result := getEncodeLevel(tt.config)
 			tt.check(t, result)
+		})
+	}
+}
+
+func TestGetCallerEncoder(t *testing.T) {
+	tests := []struct {
+		name   string
+		caller zapcore.EntryCaller
+		check  func(t *testing.T, result string)
+	}{
+		{
+			name: "caller with valid file path should format correctly",
+			caller: zapcore.EntryCaller{
+				Defined: true,
+				PC:      0,
+				File:    "/Users/test/project/logger/helper.go",
+				Line:    42,
+			},
+			check: func(t *testing.T, result string) {
+				if result == "" {
+					t.Error("getCallerEncoder() should not return empty string")
+				}
+				if !strings.Contains(result, ":42") {
+					t.Errorf("getCallerEncoder() should contain line number, got %v", result)
+				}
+				if !strings.Contains(result, "helper.go") {
+					t.Errorf("getCallerEncoder() should contain filename, got %v", result)
+				}
+			},
+		},
+		{
+			name: "caller with long path should return short path",
+			caller: zapcore.EntryCaller{
+				Defined: true,
+				PC:      0,
+				File:    "/very/long/path/to/project/internal/logger/helper.go",
+				Line:    100,
+			},
+			check: func(t *testing.T, result string) {
+				if result == "" {
+					t.Error("getCallerEncoder() should not return empty string")
+				}
+				if !strings.Contains(result, ":100") {
+					t.Errorf("getCallerEncoder() should contain line number, got %v", result)
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create a mock encoder to capture the result
+			var capturedResult string
+			mockEnc := &mockPrimitiveArrayEncoder{
+				appendStringFunc: func(s string) {
+					capturedResult = s
+				},
+			}
+
+			// Call getCallerEncoder
+			getCallerEncoder(tt.caller, mockEnc)
+
+			// Verify the result
+			tt.check(t, capturedResult)
 		})
 	}
 }

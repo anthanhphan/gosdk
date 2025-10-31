@@ -3,6 +3,9 @@
 package logger
 
 import (
+	"fmt"
+
+	"github.com/anthanhphan/gosdk/utils"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -37,10 +40,10 @@ func buildEncoder(config *Config) zapcore.EncoderConfig {
 		MessageKey:    LogEncoderMessageKey,
 		TimeKey:       LogEncoderTimeKey,
 		LevelKey:      LogEncoderLevelKey,
-		FunctionKey:   LogEncoderFunctionKey,
+		FunctionKey:   "", // Disable func_caller field
 		NameKey:       LogEncoderNameKey,
 		EncodeTime:    zapcore.ISO8601TimeEncoder,
-		EncodeCaller:  zapcore.ShortCallerEncoder,
+		EncodeCaller:  getCallerEncoder,
 		EncodeLevel:   getEncodeLevel(config),
 		CallerKey:     getCallerKey(config),
 		StacktraceKey: getStacktraceKey(config),
@@ -75,4 +78,8 @@ func getEncodeLevel(config *Config) zapcore.LevelEncoder {
 		return zapcore.LowercaseColorLevelEncoder
 	}
 	return zapcore.LowercaseLevelEncoder
+}
+
+func getCallerEncoder(caller zapcore.EntryCaller, enc zapcore.PrimitiveArrayEncoder) {
+	enc.AppendString(fmt.Sprintf("%s:%d", utils.GetShortPath(caller.File), caller.Line))
 }
