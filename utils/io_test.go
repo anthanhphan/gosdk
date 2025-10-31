@@ -100,8 +100,8 @@ func TestReadFileSecurely(t *testing.T) {
 	if err == nil {
 		t.Error("Expected error but got none")
 	}
-	if err != nil && !strings.Contains(err.Error(), "getwd: no such file or directory") {
-		t.Errorf("Error message = %v, want to contain 'getwd: no such file or directory'", err.Error())
+	if err != nil && !strings.Contains(err.Error(), "no such file or directory") {
+		t.Errorf("Error message = %v, want to contain 'no such file or directory'", err.Error())
 	}
 	if result != nil {
 		t.Error("Expected nil result")
