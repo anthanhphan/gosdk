@@ -6,13 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-
-	"github.com/anthanhphan/gosdk/logger"
-	"go.uber.org/zap"
-)
-
-var log = logger.NewLoggerWithFields(
-	zap.String("prefix", "utils.io"),
 )
 
 // ReadFileSecurely reads a file securely by preventing directory traversal attacks.
@@ -35,7 +28,6 @@ func ReadFileSecurely(path string) ([]byte, error) {
 	// Get the current working directory as the root
 	root, err := os.Getwd()
 	if err != nil {
-		log.Errorf(err.Error())
 		return nil, err
 	}
 
@@ -47,14 +39,12 @@ func ReadFileSecurely(path string) ([]byte, error) {
 
 	// Ensure the path doesn't start with ".." or "/" to prevent directory traversal
 	if filepath.IsAbs(cleanPath) || strings.HasPrefix(cleanPath, "..") {
-		log.Errorf("invalid path: %s (directory traversal not allowed)", path)
 		return nil, fmt.Errorf("invalid path: %s (directory traversal not allowed)", path)
 	}
 
 	// Open the file using the restricted filesystem
 	file, err := rootFS.Open(cleanPath)
 	if err != nil {
-		log.Errorf(err.Error())
 		return nil, err
 	}
 	defer file.Close()
