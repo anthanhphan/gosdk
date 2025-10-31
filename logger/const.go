@@ -43,8 +43,6 @@ const (
 	LogEncoderLevelKey = "level"
 	// LogEncoderCallerKey is the key for caller information (file:line).
 	LogEncoderCallerKey = "caller"
-	// LogEncoderFunctionKey is the key for function name field.
-	LogEncoderFunctionKey = "func_caller"
 	// LogEncoderNameKey is the key for logger name field.
 	LogEncoderNameKey = "logger"
 	// LogEncoderStacktraceKey is the key for stack trace field.

@@ -183,7 +183,7 @@ defer undo()
 {
   "level": "info",
   "ts": "2025-10-12T20:15:29.807+0700",
-  "caller": "main.go:25",
+  "caller": "logger/docs/example/main.go:25",
   "msg": "User created, user_id: 12345, email: user@example.com",
   "service": "user-service",
   "version": "1.0.0"
