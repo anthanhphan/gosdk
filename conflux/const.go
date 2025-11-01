@@ -7,14 +7,6 @@ const (
 	ExtensionYML  = "yml"
 )
 
-// Environment names
-const (
-	EnvQC         = "qc"
-	EnvStaging    = "staging"
-	EnvProduction = "production"
-	EnvLocal      = "local"
-)
-
 // Configuration file paths for different environments
 const (
 	QcConfigPath         = "./config/config.qc"

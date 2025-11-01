@@ -12,6 +12,14 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
+// Environment constants are imported from utils for consistency
+const (
+	EnvLocal      = utils.EnvLocal
+	EnvQC         = utils.EnvQC
+	EnvStaging    = utils.EnvStaging
+	EnvProduction = utils.EnvProduction
+)
+
 var log = logger.NewLoggerWithFields(
 	zap.String("prefix", "conflux"),
 )
