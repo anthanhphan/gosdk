@@ -49,10 +49,10 @@ const (
 	LogEncoderStacktraceKey = "stacktrace"
 )
 
-// DevelopmentConfig provides a pre-configured logger setup optimized for development.
+// DefaultConfig provides a pre-configured logger setup optimized for development.
 // It enables debug level logging, includes caller information and stack traces,
 // and uses JSON encoding for structured output.
-var DevelopmentConfig = Config{
+var DefaultConfig = Config{
 	LogLevel:          LevelDebug,
 	LogEncoding:       EncodingJSON,
 	DisableCaller:     false,
