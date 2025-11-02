@@ -1,3 +1,5 @@
+// Copyright (c) 2025 anthanhphan <an.thanhphan.work@gmail.com>
+
 package utils
 
 import (
@@ -56,7 +58,7 @@ func GetPanicLocation() (location string, err error) {
 		}
 	}
 
-	// Tìm recover frame (defer ẩn danh)
+	// Find recover frame (anonymous defer function)
 	for i, frame := range allFrames {
 		if !isSystemFrame(frame.File) && strings.Contains(frame.Function, ".func") {
 			recoverFrameIdx = i
@@ -68,7 +70,7 @@ func GetPanicLocation() (location string, err error) {
 		return "", fmt.Errorf("not in panic context (recover frame not found)")
 	}
 
-	// Tìm frame user sau recover
+	// Find first user frame after recover frame
 	for i := recoverFrameIdx + 1; i < len(allFrames); i++ {
 		frame := allFrames[i]
 		if isSystemFrame(frame.File) {

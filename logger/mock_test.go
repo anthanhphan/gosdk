@@ -1,3 +1,5 @@
+// Copyright (c) 2025 anthanhphan <an.thanhphan.work@gmail.com>
+
 package logger
 
 // mockPrimitiveArrayEncoder is a mock implementation of zapcore.PrimitiveArrayEncoder
