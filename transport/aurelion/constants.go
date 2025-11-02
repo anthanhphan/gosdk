@@ -44,8 +44,27 @@ const (
 	contextKeyRequestID = "request_id"
 )
 
+// Trace ID header
+const (
+	// TraceIDHeader is the header name for trace ID
+	TraceIDHeader = "X-Trace-ID"
+
+	// contextKeyTraceID is the context key for trace ID (internal use)
+	contextKeyTraceID = "trace_id"
+)
+
 // Health check endpoint
 const (
 	// DefaultHealthCheckPath is the default path for health check endpoint
 	DefaultHealthCheckPath = "/health"
+)
+
+// Error messages
+const (
+	// ErrContextNil is the error message when context is nil
+	ErrContextNil = "context cannot be nil"
+	// ErrUnknownError is the error message for unknown errors
+	ErrUnknownError = "unknown error"
+	// ErrConfigNil is the error message when config is nil
+	ErrConfigNil = "config cannot be nil"
 )

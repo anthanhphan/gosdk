@@ -2,10 +2,10 @@ package aurelion
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 
 	"github.com/anthanhphan/gosdk/logger"
@@ -13,6 +13,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/compress"
 	"github.com/gofiber/fiber/v2/middleware/cors"
+	"github.com/gofiber/fiber/v2/middleware/csrf"
 	"github.com/gofiber/fiber/v2/middleware/helmet"
 	"github.com/gofiber/fiber/v2/middleware/limiter"
 	"github.com/gofiber/fiber/v2/middleware/recover"
@@ -56,7 +57,7 @@ type HttpServer struct {
 func NewHttpServer(config *Config, options ...ServerOption) (*HttpServer, error) {
 	// Check for nil config
 	if config == nil {
-		return nil, fmt.Errorf("config cannot be nil")
+		return nil, errors.New(ErrConfigNil)
 	}
 
 	// Merge with default config
@@ -158,6 +159,9 @@ func (s *HttpServer) setupGlobalMiddlewares() {
 	// Add request ID middleware (always enabled)
 	s.app.Use(requestIDMiddleware())
 
+	// Add trace ID middleware (always enabled)
+	s.app.Use(traceIDMiddleware())
+
 	// Add request/response logging middleware (configurable)
 	s.app.Use(requestResponseLoggingMiddleware(s.logger, s.config.VerboseLogging))
 
@@ -168,15 +172,12 @@ func (s *HttpServer) setupGlobalMiddlewares() {
 
 	// Add CORS middleware if enabled
 	if s.config.EnableCORS {
-		corsConfig := cors.Config{
-			AllowOrigins:     strings.Join(s.config.CORS.AllowOrigins, ","),
-			AllowMethods:     strings.Join(s.config.CORS.AllowMethods, ","),
-			AllowHeaders:     strings.Join(s.config.CORS.AllowHeaders, ","),
-			AllowCredentials: s.config.CORS.AllowCredentials,
-			ExposeHeaders:    strings.Join(s.config.CORS.ExposeHeaders, ","),
-			MaxAge:           s.config.CORS.MaxAge,
-		}
-		s.app.Use(cors.New(corsConfig))
+		s.app.Use(cors.New(buildCORSConfig(s.config.CORS)))
+	}
+
+	// Add CSRF protection middleware if enabled
+	if s.config.EnableCSRF {
+		s.app.Use(csrf.New(buildCSRFConfig(s.config.CSRF)))
 	}
 }
 
@@ -196,16 +197,8 @@ func (s *HttpServer) setupGlobalMiddlewares() {
 //	)
 func (s *HttpServer) AddRoutes(routes ...interface{}) *HttpServer {
 	for _, r := range routes {
-		var route *Route
-
-		switch v := r.(type) {
-		case *RouteBuilder:
-			route = v.Build()
-		case *Route:
-			route = v
-		case Route:
-			route = &v
-		default:
+		route := convertToRouteType(r)
+		if route == nil {
 			s.logger.Warnw("invalid route type, skipping", "type", fmt.Sprintf("%T", r))
 			continue
 		}
@@ -237,15 +230,7 @@ func (s *HttpServer) registerRouteWithOptionalCORS(route *Route) {
 
 	// If route has CORS config, create a group with CORS middleware
 	if route.CORS != nil {
-		corsConfig := cors.Config{
-			AllowOrigins:     strings.Join(route.CORS.AllowOrigins, ","),
-			AllowMethods:     strings.Join(route.CORS.AllowMethods, ","),
-			AllowHeaders:     strings.Join(route.CORS.AllowHeaders, ","),
-			AllowCredentials: route.CORS.AllowCredentials,
-			ExposeHeaders:    strings.Join(route.CORS.ExposeHeaders, ","),
-			MaxAge:           route.CORS.MaxAge,
-		}
-		g := s.app.Group("", cors.New(corsConfig))
+		g := s.app.Group("", cors.New(buildCORSConfig(route.CORS)))
 		handlers := route.buildHandlers()
 		registerRoute(g, route.Method, route.Path, handlers)
 		return
@@ -273,16 +258,8 @@ func (s *HttpServer) registerRouteWithOptionalCORS(route *Route) {
 //	)
 func (s *HttpServer) AddGroupRoutes(groups ...interface{}) *HttpServer {
 	for _, g := range groups {
-		var group *GroupRoute
-
-		switch v := g.(type) {
-		case *GroupRouteBuilder:
-			group = v.Build()
-		case *GroupRoute:
-			group = v
-		case GroupRoute:
-			group = &v
-		default:
+		group := convertToGroupRouteType(g)
+		if group == nil {
 			s.logger.Warnw("invalid group type, skipping", "type", fmt.Sprintf("%T", g))
 			continue
 		}
@@ -364,8 +341,8 @@ func (s *HttpServer) applyProtectionMiddleware(route *Route) {
 // It wraps the authzChecker function and returns a proper error response on failure.
 func (s *HttpServer) createAuthorizationMiddleware(permissions []string) Middleware {
 	return func(ctx Context) error {
-		if ctx == nil {
-			return fmt.Errorf("context cannot be nil")
+		if err := validateContext(ctx); err != nil {
+			return fmt.Errorf("%w", err)
 		}
 		if s.authzChecker == nil {
 			return fmt.Errorf("authorization checker not configured")
@@ -378,18 +355,18 @@ func (s *HttpServer) createAuthorizationMiddleware(permissions []string) Middlew
 	}
 }
 
-// Start starts the HTTP server and blocks until shutdown
-//
-// Input:
-//   - none
+// Start starts the HTTP server and blocks until shutdown.
+// The server will listen for incoming requests until it receives an interrupt signal
+// (SIGINT or SIGTERM), at which point it will gracefully shut down.
+// This method handles graceful shutdown automatically using the configured timeout.
 //
 // Output:
-//   - error: Any error that occurred during server operation
+//   - error: Any error that occurred during server startup or operation
 //
 // Example:
 //
 //	if err := server.Start(); err != nil {
-//	    log.Fatal(err)
+//	    log.Fatal("server failed", err)
 //	}
 func (s *HttpServer) Start() error {
 	s.logger.Infow("starting HTTP server",

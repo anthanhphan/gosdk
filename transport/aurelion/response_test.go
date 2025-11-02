@@ -1,6 +1,7 @@
 package aurelion
 
 import (
+	"context"
 	"net/http"
 	"testing"
 )
@@ -11,7 +12,7 @@ type mockContext struct {
 	response    interface{}
 	headerSet   map[string]string
 	errorReturn error
-	returnEmpty bool
+	locals      map[string]interface{}
 }
 
 func (m *mockContext) Method() string                                    { return "GET" }
@@ -50,22 +51,44 @@ func (m *mockContext) Fresh() bool                                       { retur
 func (m *mockContext) Stale() bool                                       { return false }
 func (m *mockContext) XHR() bool                                         { return false }
 func (m *mockContext) Locals(key string, value ...interface{}) interface{} {
+	if m.locals == nil {
+		m.locals = make(map[string]interface{})
+	}
 	if len(value) > 0 {
+		m.locals[key] = value[0]
 		return value[0]
 	}
-	return nil
+	return m.locals[key]
 }
 func (m *mockContext) Next() error { return nil }
-func (m *mockContext) Context() interface{} {
-	if m.returnEmpty {
-		return "non-fiber-context"
+func (m *mockContext) Context() context.Context {
+	return context.Background()
+}
+func (m *mockContext) GetAllLocals() map[string]interface{} {
+	result := make(map[string]interface{})
+	if m.locals != nil {
+		for k, v := range m.locals {
+			result[k] = v
+		}
 	}
-	return nil
+	return result
+}
+func (m *mockContext) IsMethod(method string) bool {
+	return m.Method() == method
+}
+func (m *mockContext) RequestID() string {
+	if id := m.Locals(contextKeyRequestID); id != nil {
+		if idStr, ok := id.(string); ok {
+			return idStr
+		}
+	}
+	return ""
 }
 
 func newMockContext() *mockContext {
 	return &mockContext{
 		headerSet: make(map[string]string),
+		locals:    make(map[string]interface{}),
 	}
 }
 
@@ -332,5 +355,54 @@ func TestHealthCheck_NilContext(t *testing.T) {
 	err := HealthCheck(nil)
 	if err == nil {
 		t.Error("HealthCheck with nil context should return error")
+	}
+}
+
+func TestBusinessError_Is(t *testing.T) {
+	tests := []struct {
+		name     string
+		err      *BusinessError
+		target   error
+		expected bool
+	}{
+		{
+			name:     "same code and message should return true",
+			err:      NewError(1001, "Test error"),
+			target:   NewError(1001, "Test error"),
+			expected: true,
+		},
+		{
+			name:     "different code should return false",
+			err:      NewError(1001, "Test error"),
+			target:   NewError(1002, "Test error"),
+			expected: false,
+		},
+		{
+			name:     "different message should return false",
+			err:      NewError(1001, "Test error"),
+			target:   NewError(1001, "Different error"),
+			expected: false,
+		},
+		{
+			name:     "nil target should return false",
+			err:      NewError(1001, "Test error"),
+			target:   nil,
+			expected: false,
+		},
+		{
+			name:     "non-BusinessError target should return false",
+			err:      NewError(1001, "Test error"),
+			target:   &mockError{msg: "Generic error"},
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := tt.err.Is(tt.target)
+			if result != tt.expected {
+				t.Errorf("BusinessError.Is() = %v, want %v", result, tt.expected)
+			}
+		})
 	}
 }

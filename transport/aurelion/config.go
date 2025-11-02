@@ -36,6 +36,12 @@ type Config struct {
 	// EnableCORS enables CORS support
 	EnableCORS bool `json:"enable_cors,omitempty" yaml:"enable_cors,omitempty"`
 
+	// EnableCSRF enables CSRF protection
+	EnableCSRF bool `json:"enable_csrf,omitempty" yaml:"enable_csrf,omitempty"`
+
+	// CSRF configuration
+	CSRF *CSRFConfig `json:"csrf,omitempty" yaml:"csrf,omitempty"`
+
 	// CORS configuration
 	CORS *CORSConfig `json:"cors,omitempty" yaml:"cors,omitempty"`
 
@@ -77,6 +83,10 @@ func (config *Config) Validate() error {
 
 	if err := config.validateCORS(); err != nil {
 		return err
+	}
+
+	if err := config.validateCSRF(); err != nil {
+		return fmt.Errorf("csrf config: %w", err)
 	}
 
 	return nil
@@ -141,6 +151,108 @@ func (config *Config) validateCORS() error {
 
 	if err := config.CORS.Validate(); err != nil {
 		return fmt.Errorf("cors config: %w", err)
+	}
+
+	return nil
+}
+
+// validateCSRF validates CSRF configuration
+func (config *Config) validateCSRF() error {
+	if !config.EnableCSRF {
+		return nil
+	}
+
+	if config.CSRF == nil {
+		return errors.New("csrf config is required when enable_csrf is true")
+	}
+
+	if err := config.CSRF.Validate(); err != nil {
+		return fmt.Errorf("csrf config: %w", err)
+	}
+
+	return nil
+}
+
+// CSRFConfig represents CSRF protection configuration
+type CSRFConfig struct {
+	// KeyLookup is a string in the form of "<source>:<key>" that is used
+	// to create an Extractor that extracts the token from the request.
+	// Possible values: "header:<name>", "query:<name>", "param:<name>", "form:<name>", "cookie:<name>"
+	// Default: "header:X-Csrf-Token"
+	KeyLookup string `json:"key_lookup,omitempty" yaml:"key_lookup,omitempty"`
+
+	// CookieName is the name of the CSRF token cookie
+	CookieName string `json:"cookie_name,omitempty" yaml:"cookie_name,omitempty"`
+
+	// CookiePath is the path for the CSRF token cookie
+	CookiePath string `json:"cookie_path,omitempty" yaml:"cookie_path,omitempty"`
+
+	// CookieDomain is the domain for the CSRF token cookie
+	CookieDomain string `json:"cookie_domain,omitempty" yaml:"cookie_domain,omitempty"`
+
+	// CookieSameSite is the SameSite attribute for the CSRF token cookie
+	// Values: "Strict", "Lax", "None"
+	CookieSameSite string `json:"cookie_same_site,omitempty" yaml:"cookie_same_site,omitempty"`
+
+	// CookieSecure enables secure flag for the CSRF token cookie (HTTPS only)
+	CookieSecure bool `json:"cookie_secure,omitempty" yaml:"cookie_secure,omitempty"`
+
+	// CookieHTTPOnly enables HTTPOnly flag for the CSRF token cookie
+	CookieHTTPOnly bool `json:"cookie_http_only,omitempty" yaml:"cookie_http_only,omitempty"`
+
+	// CookieSessionOnly indicates if cookie should last for only the browser session
+	CookieSessionOnly bool `json:"cookie_session_only,omitempty" yaml:"cookie_session_only,omitempty"`
+
+	// SingleUseToken indicates whether tokens should be single-use
+	SingleUseToken bool `json:"single_use_token,omitempty" yaml:"single_use_token,omitempty"`
+
+	// Expiration is the expiration time for CSRF tokens
+	Expiration *time.Duration `json:"expiration,omitempty" yaml:"expiration,omitempty"`
+}
+
+// Validate validates the CSRF configuration
+//
+// Input:
+//   - none (receiver method)
+//
+// Output:
+//   - error: Any validation error
+func (c *CSRFConfig) Validate() error {
+	// KeyLookup is optional, defaults will be handled by fiber middleware
+	// But if provided, must be in correct format
+	if c.KeyLookup != "" {
+		parts := strings.Split(c.KeyLookup, ":")
+		if len(parts) != 2 {
+			return fmt.Errorf("key_lookup must be in the form of <source>:<key>, got: %s", c.KeyLookup)
+		}
+		validSources := map[string]bool{
+			"header": true,
+			"query":  true,
+			"param":  true,
+			"form":   true,
+			"cookie": true,
+		}
+		if !validSources[parts[0]] {
+			return fmt.Errorf("invalid key_lookup source: %s (must be header, query, param, form, or cookie)", parts[0])
+		}
+		if parts[1] == "" {
+			return errors.New("key_lookup key cannot be empty")
+		}
+	}
+
+	if c.Expiration != nil && *c.Expiration < 0 {
+		return errors.New("expiration cannot be negative")
+	}
+
+	if c.CookieSameSite != "" {
+		validSameSite := map[string]bool{
+			"Strict": true,
+			"Lax":    true,
+			"None":   true,
+		}
+		if !validSameSite[c.CookieSameSite] {
+			return fmt.Errorf("invalid cookie_same_site: %s (must be Strict, Lax, or None)", c.CookieSameSite)
+		}
 	}
 
 	return nil

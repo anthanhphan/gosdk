@@ -50,6 +50,13 @@ func getRequestIDFromContext(c *fiber.Ctx) string {
 }
 
 // buildRequestLogFields builds log fields for incoming request logging.
+//
+// Input:
+//   - c: The fiber context containing request information
+//   - verbose: Whether to include detailed information like body and query params
+//
+// Output:
+//   - []interface{}: Slice of key-value pairs for structured logging
 func buildRequestLogFields(c *fiber.Ctx, verbose bool) []interface{} {
 	logFields := []interface{}{
 		"method", c.Method(),
@@ -86,6 +93,14 @@ func buildRequestLogFields(c *fiber.Ctx, verbose bool) []interface{} {
 }
 
 // buildResponseLogFields builds log fields for outgoing response logging.
+//
+// Input:
+//   - c: The fiber context containing response information
+//   - verbose: Whether to include detailed information like response body
+//   - duration: The request processing duration
+//
+// Output:
+//   - []interface{}: Slice of key-value pairs for structured logging
 func buildResponseLogFields(c *fiber.Ctx, verbose bool, duration time.Duration) []interface{} {
 	responseFields := []interface{}{
 		"method", c.Method(),

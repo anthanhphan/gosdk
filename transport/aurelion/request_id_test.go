@@ -135,8 +135,8 @@ func TestRequestIDMiddleware_ReuseExisting(t *testing.T) {
 }
 
 func TestGetRequestID_WithMockContext(t *testing.T) {
-	// Test with mock context that returns non-fiber context
-	mockCtx := &mockContext{returnEmpty: true}
+	// Test with mock context that has no request ID in locals
+	mockCtx := &mockContext{}
 	rid := GetRequestID(mockCtx)
 
 	if rid != "" {

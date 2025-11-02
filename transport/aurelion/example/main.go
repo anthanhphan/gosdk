@@ -1,12 +1,14 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"time"
 
 	"github.com/anthanhphan/gosdk/logger"
 	"github.com/anthanhphan/gosdk/transport/aurelion"
+	"github.com/anthanhphan/gosdk/transport/aurelion/contextutil"
 	"github.com/anthanhphan/gosdk/utils"
 )
 
@@ -24,7 +26,7 @@ func main() {
 	shutdownTimeout := 30 * time.Second
 	config := &aurelion.Config{
 		ServiceName:             "Demo API",
-		Port:                    8000,
+		Port:                    8001,
 		GracefulShutdownTimeout: &shutdownTimeout,
 		EnableCORS:              false,
 		VerboseLogging:          true, // Log request/response bodies for demo
@@ -36,6 +38,7 @@ func main() {
 		aurelion.WithPanicRecover(panicRecoverMiddleware()),
 		aurelion.WithAuthentication(authMiddleware()),
 		aurelion.WithAuthorization(authzChecker()),
+		aurelion.WithGlobalMiddleware(aurelion.DefaultHeaderToLocalsMiddleware()),
 	)
 	if err != nil {
 		logger.NewLoggerWithFields().Fatalw("failed to create server", "error", err)
@@ -83,14 +86,29 @@ func registerRoutes(server *aurelion.HttpServer) {
 		// GET with request ID (auto-generated)
 		aurelion.NewRoute("/info").
 			GET().
+			Protected().
 			Handler(func(ctx aurelion.Context) error {
 				requestID := aurelion.GetRequestID(ctx)
-				return aurelion.OK(ctx, "Request info", aurelion.Map{
-					"request_id": requestID,
-					"method":     ctx.Method(),
-					"path":       ctx.Path(),
-					"ip":         ctx.IP(),
-				})
+
+				testFunc := func(ctx context.Context, requestID string) error {
+					if requestID == "" {
+						return errors.New("request ID is empty")
+					}
+
+					userID := contextutil.GetUserIDFromContext(ctx)
+					if userID == "" {
+						return errors.New("user ID is empty")
+					}
+
+					lang := contextutil.GetLanguageFromContext(ctx)
+					if lang == "" {
+						return errors.New("language is empty")
+					}
+
+					logger.Infow("request ID", "request_id", contextutil.GetRequestIDFromContext(ctx), "user_id", userID, "lang", lang, "trace_id", contextutil.GetTraceIDFromContext(ctx))
+					return nil
+				}
+				return testFunc(ctx.Context(), requestID)
 			}),
 	)
 
@@ -240,8 +258,9 @@ func authMiddleware() aurelion.Middleware {
 			return aurelion.Unauthorized(ctx, "Invalid token")
 		}
 
-		// Set user info in context
-		ctx.Locals("user_id", 123)
+		// Set user info in context (using Locals for aurelion.Context compatibility)
+		// The Context() method will automatically merge Locals values into context.Context
+		ctx.Locals("user_id", "123")
 		ctx.Locals("username", "demo_user")
 		ctx.Locals("role", "admin")
 		ctx.Locals("permissions", []string{"read:users", "write:users"})

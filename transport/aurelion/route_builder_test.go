@@ -394,6 +394,52 @@ func TestRegisterRoute_AllMethods(t *testing.T) {
 	resp.Body.Close()
 }
 
+func TestHandlerToFiber_ValidHandler(t *testing.T) {
+	handler := func(ctx Context) error {
+		return ctx.SendString("test")
+	}
+	fiberHandler := handlerToFiber(handler)
+
+	app := fiber.New()
+	app.Get("/test", fiberHandler)
+
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	resp, err := app.Test(req, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("Expected status 200, got %d", resp.StatusCode)
+	}
+}
+
+func TestMiddlewareToFiber_ValidMiddleware(t *testing.T) {
+	middleware := func(ctx Context) error {
+		ctx.Set("X-Test", "value")
+		return ctx.Next()
+	}
+	fiberMiddleware := middlewareToFiber(middleware)
+
+	app := fiber.New()
+	app.Get("/test", fiberMiddleware, func(c *fiber.Ctx) error {
+		return c.SendString("ok")
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	resp, err := app.Test(req, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	// Header is set in response, check response header
+	if resp.Header.Get("X-Test") != "value" {
+		t.Errorf("Expected header value 'value' in response, got %s", resp.Header.Get("X-Test"))
+	}
+}
+
 func TestRegisterRoute_NilOrEmptyHandlers(t *testing.T) {
 	app := fiber.New()
 

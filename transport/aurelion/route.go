@@ -342,25 +342,11 @@ func (grb *GroupRouteBuilder) Route(route interface{}) *GroupRouteBuilder {
 	return grb
 }
 
-// convertToRoute converts various route types to a *Route pointer.
-// Returns nil for unsupported types or nil inputs.
+// convertToRoute converts various route types to a *Route pointer (internal use).
+// Supports Route, *Route, and *RouteBuilder types.
+// This is a wrapper around convertToRouteType for backward compatibility.
 func convertToRoute(route interface{}) *Route {
-	switch v := route.(type) {
-	case Route:
-		return &v
-	case *Route:
-		if v == nil {
-			return nil
-		}
-		return v
-	case *RouteBuilder:
-		if v == nil {
-			return nil
-		}
-		return v.Build()
-	default:
-		return nil
-	}
+	return convertToRouteType(route)
 }
 
 // Routes adds multiple routes to the group.
@@ -471,6 +457,12 @@ func (route *Route) buildHandlers() []fiber.Handler {
 
 // registerRoute registers a route with the appropriate HTTP method (internal use).
 // It maps our Method type to the corresponding fiber router method.
+//
+// Input:
+//   - router: The fiber router to register the route on
+//   - method: The HTTP method (GET, POST, etc.)
+//   - path: The route path
+//   - handlers: The handler chain (middlewares + handler)
 func registerRoute(router fiber.Router, method Method, path string, handlers []fiber.Handler) {
 	if router == nil || len(handlers) == 0 {
 		return
@@ -518,6 +510,23 @@ func (route *Route) Clone() *Route {
 	}
 	copy(clone.Middlewares, route.Middlewares)
 	copy(clone.RequiredPermissions, route.RequiredPermissions)
+
+	// Deep copy CORS config if present
+	if route.CORS != nil {
+		clone.CORS = &CORSConfig{
+			AllowOrigins:     make([]string, len(route.CORS.AllowOrigins)),
+			AllowMethods:     make([]string, len(route.CORS.AllowMethods)),
+			AllowHeaders:     make([]string, len(route.CORS.AllowHeaders)),
+			AllowCredentials: route.CORS.AllowCredentials,
+			ExposeHeaders:    make([]string, len(route.CORS.ExposeHeaders)),
+			MaxAge:           route.CORS.MaxAge,
+		}
+		copy(clone.CORS.AllowOrigins, route.CORS.AllowOrigins)
+		copy(clone.CORS.AllowMethods, route.CORS.AllowMethods)
+		copy(clone.CORS.AllowHeaders, route.CORS.AllowHeaders)
+		copy(clone.CORS.ExposeHeaders, route.CORS.ExposeHeaders)
+	}
+
 	return clone
 }
 

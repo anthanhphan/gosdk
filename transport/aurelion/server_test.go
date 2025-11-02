@@ -414,26 +414,6 @@ func TestCreateAuthorizationMiddleware_NilContext(t *testing.T) {
 	}
 }
 
-func TestCreateAuthorizationMiddleware_NilAuthzChecker(t *testing.T) {
-	config := &Config{
-		ServiceName: "Test Service",
-		Port:        8080,
-	}
-
-	server, err := NewHttpServer(config)
-	if err != nil {
-		t.Fatalf("Failed to create server: %v", err)
-	}
-
-	middleware := server.createAuthorizationMiddleware([]string{"read"})
-
-	mockCtx := &mockContext{}
-	err = middleware(mockCtx)
-	if err == nil {
-		t.Error("Expected error for nil authz checker, got nil")
-	}
-}
-
 func TestCreateAuthorizationMiddleware_Success(t *testing.T) {
 	config := &Config{
 		ServiceName: "Test Service",
@@ -720,4 +700,90 @@ func TestServer_Shutdown_WithZeroTimeout(t *testing.T) {
 	ctx := context.Background()
 	err = server.Shutdown(ctx)
 	_ = err // Expected error or nil both acceptable for unstarted server
+}
+
+func TestRegisterRouteWithOptionalCORS_WithCORS(t *testing.T) {
+	config := &Config{
+		ServiceName: "Test Service",
+		Port:        8092,
+	}
+
+	server, err := NewHttpServer(config)
+	if err != nil {
+		t.Fatalf("Failed to create server: %v", err)
+	}
+
+	route := &Route{
+		Path:   "/test",
+		Method: GET,
+		Handler: func(ctx Context) error {
+			return OK(ctx, "test")
+		},
+		CORS: &CORSConfig{
+			AllowOrigins: []string{"https://example.com"},
+			AllowMethods: []string{"GET"},
+			AllowHeaders: []string{"Content-Type"},
+		},
+	}
+
+	// Should not panic
+	server.registerRouteWithOptionalCORS(route)
+}
+
+func TestRegisterRouteWithOptionalCORS_WithoutCORS(t *testing.T) {
+	config := &Config{
+		ServiceName: "Test Service",
+		Port:        8093,
+	}
+
+	server, err := NewHttpServer(config)
+	if err != nil {
+		t.Fatalf("Failed to create server: %v", err)
+	}
+
+	route := &Route{
+		Path:   "/test",
+		Method: GET,
+		Handler: func(ctx Context) error {
+			return OK(ctx, "test")
+		},
+		CORS: nil,
+	}
+
+	// Should not panic
+	server.registerRouteWithOptionalCORS(route)
+}
+
+func TestRegisterRouteWithOptionalCORS_NilRoute(t *testing.T) {
+	config := &Config{
+		ServiceName: "Test Service",
+		Port:        8094,
+	}
+
+	server, err := NewHttpServer(config)
+	if err != nil {
+		t.Fatalf("Failed to create server: %v", err)
+	}
+
+	// Should not panic with nil route
+	server.registerRouteWithOptionalCORS(nil)
+}
+
+func TestCreateAuthorizationMiddleware_NilAuthzChecker(t *testing.T) {
+	config := &Config{
+		ServiceName: "Test Service",
+		Port:        8095,
+	}
+
+	server, err := NewHttpServer(config)
+	if err != nil {
+		t.Fatalf("Failed to create server: %v", err)
+	}
+
+	middleware := server.createAuthorizationMiddleware([]string{"read"})
+	mockCtx := &mockContext{}
+	err = middleware(mockCtx)
+	if err == nil {
+		t.Error("Expected error for nil authz checker, got nil")
+	}
 }

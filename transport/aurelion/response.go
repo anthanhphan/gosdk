@@ -21,9 +21,31 @@ type BusinessError struct {
 	Message string
 }
 
-// Error implements the error interface
+// Error implements the error interface.
+//
+// Output:
+//   - string: Formatted error string with code and message
 func (e *BusinessError) Error() string {
 	return fmt.Sprintf("[%d] %s", e.Code, e.Message)
+}
+
+// Is checks if the error matches the target error type.
+// This allows errors.Is to work with BusinessError.
+//
+// Input:
+//   - target: The target error to compare against
+//
+// Output:
+//   - bool: True if the target is a BusinessError with the same code
+func (e *BusinessError) Is(target error) bool {
+	if target == nil {
+		return false
+	}
+	t, ok := target.(*BusinessError)
+	if !ok {
+		return false
+	}
+	return e.Code == t.Code && e.Message == t.Message
 }
 
 // NewError creates a new business error
@@ -78,19 +100,11 @@ func NewErrorf(code int, format string, args ...interface{}) *BusinessError {
 //
 //	return aurelion.OK(ctx, "User created", user)
 func OK(ctx Context, message string, data ...interface{}) error {
-	if ctx == nil {
-		return fmt.Errorf("context cannot be nil")
+	if err := validateContext(ctx); err != nil {
+		return fmt.Errorf("%w", err)
 	}
 
-	response := APIResponse{
-		Success:   true,
-		Code:      200,
-		Message:   message,
-		Timestamp: time.Now().UnixMilli(),
-	}
-	if len(data) > 0 {
-		response.Data = data[0]
-	}
+	response := buildAPIResponse(true, http.StatusOK, message, data...)
 	return ctx.Status(http.StatusOK).JSON(response)
 }
 
@@ -107,20 +121,15 @@ func OK(ctx Context, message string, data ...interface{}) error {
 //
 //	return aurelion.Error(ctx, aurelion.NewError(1001, "User not found"))
 func Error(ctx Context, err error) error {
-	if ctx == nil {
-		return fmt.Errorf("context cannot be nil")
+	if validateErr := validateContext(ctx); validateErr != nil {
+		return fmt.Errorf("%w", validateErr)
 	}
 	if err == nil {
-		return InternalServerError(ctx, "unknown error")
+		return InternalServerError(ctx, ErrUnknownError)
 	}
 
 	if bizErr, ok := err.(*BusinessError); ok {
-		return ctx.Status(http.StatusOK).JSON(APIResponse{
-			Success:   false,
-			Code:      bizErr.Code,
-			Message:   bizErr.Message,
-			Timestamp: time.Now().UnixMilli(),
-		})
+		return ctx.Status(http.StatusOK).JSON(buildAPIResponse(false, bizErr.Code, bizErr.Message))
 	}
 	return InternalServerError(ctx, err.Error())
 }
@@ -138,15 +147,10 @@ func Error(ctx Context, err error) error {
 //
 //	return aurelion.BadRequest(ctx, "Invalid input")
 func BadRequest(ctx Context, message string) error {
-	if ctx == nil {
-		return fmt.Errorf("context cannot be nil")
+	if err := validateContext(ctx); err != nil {
+		return fmt.Errorf("%w", err)
 	}
-	return ctx.Status(http.StatusOK).JSON(APIResponse{
-		Success:   false,
-		Code:      http.StatusBadRequest,
-		Message:   message,
-		Timestamp: time.Now().UnixMilli(),
-	})
+	return ctx.Status(http.StatusOK).JSON(buildAPIResponse(false, http.StatusBadRequest, message))
 }
 
 // Unauthorized sends an unauthorized error response with HTTP 200 and code 401
@@ -162,15 +166,10 @@ func BadRequest(ctx Context, message string) error {
 //
 //	return aurelion.Unauthorized(ctx, "Authentication required")
 func Unauthorized(ctx Context, message string) error {
-	if ctx == nil {
-		return fmt.Errorf("context cannot be nil")
+	if err := validateContext(ctx); err != nil {
+		return fmt.Errorf("%w", err)
 	}
-	return ctx.Status(http.StatusOK).JSON(APIResponse{
-		Success:   false,
-		Code:      http.StatusUnauthorized,
-		Message:   message,
-		Timestamp: time.Now().UnixMilli(),
-	})
+	return ctx.Status(http.StatusOK).JSON(buildAPIResponse(false, http.StatusUnauthorized, message))
 }
 
 // Forbidden sends a forbidden error response with HTTP 200 and code 403
@@ -186,15 +185,10 @@ func Unauthorized(ctx Context, message string) error {
 //
 //	return aurelion.Forbidden(ctx, "Access denied")
 func Forbidden(ctx Context, message string) error {
-	if ctx == nil {
-		return fmt.Errorf("context cannot be nil")
+	if err := validateContext(ctx); err != nil {
+		return fmt.Errorf("%w", err)
 	}
-	return ctx.Status(http.StatusOK).JSON(APIResponse{
-		Success:   false,
-		Code:      http.StatusForbidden,
-		Message:   message,
-		Timestamp: time.Now().UnixMilli(),
-	})
+	return ctx.Status(http.StatusOK).JSON(buildAPIResponse(false, http.StatusForbidden, message))
 }
 
 // NotFound sends a not found error response with HTTP 200 and code 404
@@ -210,15 +204,10 @@ func Forbidden(ctx Context, message string) error {
 //
 //	return aurelion.NotFound(ctx, "User not found")
 func NotFound(ctx Context, message string) error {
-	if ctx == nil {
-		return fmt.Errorf("context cannot be nil")
+	if err := validateContext(ctx); err != nil {
+		return fmt.Errorf("%w", err)
 	}
-	return ctx.Status(http.StatusOK).JSON(APIResponse{
-		Success:   false,
-		Code:      http.StatusNotFound,
-		Message:   message,
-		Timestamp: time.Now().UnixMilli(),
-	})
+	return ctx.Status(http.StatusOK).JSON(buildAPIResponse(false, http.StatusNotFound, message))
 }
 
 // InternalServerError sends an internal server error response with HTTP 500
@@ -234,15 +223,10 @@ func NotFound(ctx Context, message string) error {
 //
 //	return aurelion.InternalServerError(ctx, "Database error")
 func InternalServerError(ctx Context, message string) error {
-	if ctx == nil {
-		return fmt.Errorf("context cannot be nil")
+	if err := validateContext(ctx); err != nil {
+		return fmt.Errorf("%w", err)
 	}
-	return ctx.Status(http.StatusInternalServerError).JSON(APIResponse{
-		Success:   false,
-		Code:      http.StatusInternalServerError,
-		Message:   message,
-		Timestamp: time.Now().UnixMilli(),
-	})
+	return ctx.Status(http.StatusInternalServerError).JSON(buildAPIResponse(false, http.StatusInternalServerError, message))
 }
 
 // HealthCheck sends a health check response indicating the server is healthy
@@ -257,17 +241,12 @@ func InternalServerError(ctx Context, message string) error {
 //
 //	return aurelion.HealthCheck(ctx)
 func HealthCheck(ctx Context) error {
-	if ctx == nil {
-		return fmt.Errorf("context cannot be nil")
+	if err := validateContext(ctx); err != nil {
+		return fmt.Errorf("%w", err)
 	}
-	return ctx.Status(http.StatusOK).JSON(APIResponse{
-		Success: true,
-		Code:    http.StatusOK,
-		Message: "Server is healthy",
-		Data: Map{
-			"status":    "healthy",
-			"timestamp": time.Now().UnixMilli(),
-		},
-		Timestamp: time.Now().UnixMilli(),
+	response := buildAPIResponse(true, http.StatusOK, "Server is healthy", Map{
+		"status":    "healthy",
+		"timestamp": time.Now().UnixMilli(),
 	})
+	return ctx.Status(http.StatusOK).JSON(response)
 }

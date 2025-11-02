@@ -76,6 +76,54 @@ func TestRoute_Clone(t *testing.T) {
 	}
 }
 
+func TestRoute_Clone_WithCORS(t *testing.T) {
+	original := &Route{
+		Path:   "/api/users",
+		Method: GET,
+		Handler: func(ctx Context) error {
+			return nil
+		},
+		CORS: &CORSConfig{
+			AllowOrigins: []string{"https://example.com", "https://test.com"},
+			AllowMethods: []string{"GET", "POST"},
+			AllowHeaders: []string{"Content-Type"},
+			MaxAge:       3600,
+		},
+	}
+
+	clone := original.Clone()
+
+	if clone == nil {
+		t.Fatal("Clone should not be nil")
+	}
+
+	// Check CORS config is deep copied
+	if clone.CORS == nil {
+		t.Error("Clone should have CORS config")
+	}
+	if clone.CORS == original.CORS {
+		t.Error("Clone should have independent CORS config, not reuse the same pointer")
+	}
+
+	// Check CORS fields are copied
+	if len(clone.CORS.AllowOrigins) != len(original.CORS.AllowOrigins) {
+		t.Errorf("Clone CORS AllowOrigins length = %v, want %v",
+			len(clone.CORS.AllowOrigins), len(original.CORS.AllowOrigins))
+	}
+
+	if clone.CORS.MaxAge != original.CORS.MaxAge {
+		t.Errorf("Clone CORS MaxAge = %v, want %v", clone.CORS.MaxAge, original.CORS.MaxAge)
+	}
+
+	// Modify clone CORS to ensure it's independent
+	if len(clone.CORS.AllowOrigins) > 0 {
+		clone.CORS.AllowOrigins[0] = "modified"
+		if original.CORS.AllowOrigins[0] == "modified" {
+			t.Error("Clone should have independent CORS slice, but original was modified")
+		}
+	}
+}
+
 func TestRoute_Clone_Nil(t *testing.T) {
 	var route *Route = nil
 	clone := route.Clone()

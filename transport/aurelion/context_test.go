@@ -352,6 +352,26 @@ func TestContextWrapper_MoreMethods(t *testing.T) {
 			t.Error("Context() should not be nil")
 		}
 
+		// Test that Context() merges all Locals values
+		ctx.Locals("custom_key", "custom_value")
+		ctx.Locals("another_key", "another_value")
+
+		contextCtx := ctx.Context()
+		if contextCtx == nil {
+			t.Error("Context() should not be nil")
+		}
+
+		// Verify custom keys are accessible via context.Context
+		customValue := getValueFromContext(contextCtx, "custom_key")
+		if customValue != "custom_value" {
+			t.Errorf("Expected custom_value, got %s", customValue)
+		}
+
+		anotherValue := getValueFromContext(contextCtx, "another_key")
+		if anotherValue != "another_value" {
+			t.Errorf("Expected another_value, got %s", anotherValue)
+		}
+
 		// Test ClearCookie
 		ctx.ClearCookie("test")
 
@@ -467,5 +487,129 @@ func TestContextWrapper_Redirect(t *testing.T) {
 
 	if resp.StatusCode != http.StatusFound {
 		t.Errorf("Expected status 302, got %d", resp.StatusCode)
+	}
+}
+
+func TestNewContext_NilInput(t *testing.T) {
+	ctx := newContext(nil)
+	if ctx != nil {
+		t.Error("newContext(nil) should return nil")
+	}
+}
+
+func TestContextWrapper_IsMethod(t *testing.T) {
+	app := fiber.New()
+
+	app.Get("/test", func(c *fiber.Ctx) error {
+		ctx := newContext(c)
+		if !ctx.IsMethod("GET") {
+			t.Error("IsMethod(\"GET\") should return true")
+		}
+		if ctx.IsMethod("POST") {
+			t.Error("IsMethod(\"POST\") should return false")
+		}
+		return c.SendString("ok")
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	resp, err := app.Test(req, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+}
+
+func TestContextWrapper_RequestID(t *testing.T) {
+	app := fiber.New()
+	app.Use(requestIDMiddleware())
+
+	app.Get("/test", func(c *fiber.Ctx) error {
+		ctx := newContext(c)
+		requestID := ctx.RequestID()
+		if requestID == "" {
+			t.Error("RequestID() should not be empty")
+		}
+		return c.SendString("ok")
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	resp, err := app.Test(req, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+}
+
+func TestContextWrapper_GetAllLocals(t *testing.T) {
+	app := fiber.New()
+
+	app.Get("/test", func(c *fiber.Ctx) error {
+		ctx := newContext(c)
+
+		// Set some locals through the wrapper to ensure they're tracked
+		ctx.Locals("key1", "value1")
+		ctx.Locals("key2", "value2")
+		ctx.Locals("key3", 123) // non-string value
+
+		allLocals := ctx.GetAllLocals()
+
+		if allLocals == nil {
+			t.Error("GetAllLocals() should not return nil")
+		}
+
+		if allLocals["key1"] != "value1" {
+			t.Errorf("Expected key1 = value1, got %v", allLocals["key1"])
+		}
+
+		if allLocals["key2"] != "value2" {
+			t.Errorf("Expected key2 = value2, got %v", allLocals["key2"])
+		}
+
+		if allLocals["key3"] != 123 {
+			t.Errorf("Expected key3 = 123, got %v", allLocals["key3"])
+		}
+
+		return c.SendString("ok")
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	resp, err := app.Test(req, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("Expected status 200, got %d", resp.StatusCode)
+	}
+}
+
+func TestContextWrapper_GetAllLocals_Empty(t *testing.T) {
+	app := fiber.New()
+
+	app.Get("/test", func(c *fiber.Ctx) error {
+		ctx := newContext(c)
+		allLocals := ctx.GetAllLocals()
+
+		if allLocals == nil {
+			t.Error("GetAllLocals() should not return nil even when empty")
+		}
+
+		// Note: GetAllLocals may return non-empty map due to middleware setting values
+		// So we just check it's not nil
+		_ = allLocals
+
+		return c.SendString("ok")
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	resp, err := app.Test(req, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("Expected status 200, got %d", resp.StatusCode)
 	}
 }
