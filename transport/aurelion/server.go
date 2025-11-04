@@ -124,7 +124,10 @@ func NewHttpServer(config *Config, options ...ServerOption) (*HttpServer, error)
 	return server, nil
 }
 
-// setupGlobalMiddlewares sets up global middlewares
+// setupGlobalMiddlewares configures all global middleware for the server.
+// This includes security headers (Helmet), rate limiting, compression,
+// panic recovery, request/trace ID generation, logging, CORS, and CSRF protection.
+// Internal use only - called automatically during server initialization.
 func (s *HttpServer) setupGlobalMiddlewares() {
 	// Add Helmet middleware (security headers)
 	s.app.Use(helmet.New())
@@ -155,6 +158,9 @@ func (s *HttpServer) setupGlobalMiddlewares() {
 		// Use fiber's built-in recover middleware as default
 		s.app.Use(recover.New())
 	}
+
+	// Add config middleware (always enabled) - makes config available in context
+	s.app.Use(configMiddleware(s.config))
 
 	// Add request ID middleware (always enabled)
 	s.app.Use(requestIDMiddleware())
@@ -222,7 +228,12 @@ func (s *HttpServer) AddRoutes(routes ...interface{}) *HttpServer {
 	return s
 }
 
-// registerRouteWithOptionalCORS registers a route with optional per-route CORS configuration
+// registerRouteWithOptionalCORS registers a route with optional per-route CORS configuration.
+// If the route has CORS config, creates a fiber group with CORS middleware.
+// Otherwise, registers the route directly. Internal use only.
+//
+// Input:
+//   - route: The route to register
 func (s *HttpServer) registerRouteWithOptionalCORS(route *Route) {
 	if route == nil {
 		return
@@ -285,6 +296,11 @@ func (s *HttpServer) AddGroupRoutes(groups ...interface{}) *HttpServer {
 
 // applyGroupProtection applies protection middleware to routes in a group.
 // It handles both group-level and individual route-level protection settings.
+// If a group is protected, all routes in the group are automatically protected.
+// Individual routes can also be protected independently. Internal use only.
+//
+// Input:
+//   - group: The group route to apply protection to
 func (s *HttpServer) applyGroupProtection(group *GroupRoute) {
 	for i := range group.Routes {
 		// If group is protected, protect all routes in the group
@@ -302,6 +318,10 @@ func (s *HttpServer) applyGroupProtection(group *GroupRoute) {
 // applyProtectionMiddleware applies authentication and authorization middleware to a route.
 // It prepends auth/authz middlewares to the route's existing middleware chain.
 // This ensures security checks run before any route-specific logic.
+// Internal use only - called automatically when routes are added.
+//
+// Input:
+//   - route: The route to apply protection to
 func (s *HttpServer) applyProtectionMiddleware(route *Route) {
 	if route == nil || !route.IsProtected {
 		return
@@ -339,6 +359,13 @@ func (s *HttpServer) applyProtectionMiddleware(route *Route) {
 
 // createAuthorizationMiddleware creates an authorization middleware for the given permissions.
 // It wraps the authzChecker function and returns a proper error response on failure.
+// Internal use only - called automatically when routes require permissions.
+//
+// Input:
+//   - permissions: The list of required permissions for the route
+//
+// Output:
+//   - Middleware: The authorization middleware function
 func (s *HttpServer) createAuthorizationMiddleware(permissions []string) Middleware {
 	return func(ctx Context) error {
 		if err := validateContext(ctx); err != nil {

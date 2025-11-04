@@ -131,50 +131,68 @@ func TestGetUserIDFromContext(t *testing.T) {
 	tests := []struct {
 		name  string
 		setup func() context.Context
-		want  string
-		check func(t *testing.T, got string)
+		check func(t *testing.T, got interface{})
 	}{
 		{
-			name:  "nil context should return empty string",
+			name:  "nil context should return nil",
 			setup: func() context.Context { return nil }, //nolint:staticcheck // intentional nil test
-			want:  "",
-			check: func(t *testing.T, got string) {
-				if got != "" {
-					t.Errorf("GetUserIDFromContext(nil) = %v, want empty string", got)
+			check: func(t *testing.T, got interface{}) {
+				if got != nil {
+					t.Errorf("GetUserIDFromContext(nil) = %v, want nil", got)
 				}
 			},
 		},
 		{
-			name: "user ID in context should be returned",
+			name: "string user ID in context should be returned",
 			setup: func() context.Context {
 				return SetUserIDInContext(context.Background(), "user123")
 			},
-			want: "user123",
-			check: func(t *testing.T, got string) {
-				if got != "user123" {
-					t.Errorf("GetUserIDFromContext() = %v, want user123", got)
+			check: func(t *testing.T, got interface{}) {
+				userID, ok := got.(string)
+				if !ok {
+					t.Errorf("GetUserIDFromContext() type = %T, want string", got)
+				}
+				if userID != "user123" {
+					t.Errorf("GetUserIDFromContext() = %v, want user123", userID)
 				}
 			},
 		},
 		{
-			name: "non-string user ID value should return empty string",
+			name: "int64 user ID value should be returned as int64",
+			setup: func() context.Context {
+				return context.WithValue(context.Background(), UserIDKey{}, int64(12345))
+			},
+			check: func(t *testing.T, got interface{}) {
+				userID, ok := got.(int64)
+				if !ok {
+					t.Errorf("GetUserIDFromContext() type = %T, want int64", got)
+				}
+				if userID != 12345 {
+					t.Errorf("GetUserIDFromContext() = %v, want 12345", userID)
+				}
+			},
+		},
+		{
+			name: "int user ID value should be returned as int",
 			setup: func() context.Context {
 				return context.WithValue(context.Background(), UserIDKey{}, 12345)
 			},
-			want: "",
-			check: func(t *testing.T, got string) {
-				if got != "" {
-					t.Errorf("GetUserIDFromContext() = %v, want empty string", got)
+			check: func(t *testing.T, got interface{}) {
+				userID, ok := got.(int)
+				if !ok {
+					t.Errorf("GetUserIDFromContext() type = %T, want int", got)
+				}
+				if userID != 12345 {
+					t.Errorf("GetUserIDFromContext() = %v, want 12345", userID)
 				}
 			},
 		},
 		{
-			name:  "no user ID in context should return empty string",
+			name:  "no user ID in context should return nil",
 			setup: func() context.Context { return context.Background() },
-			want:  "",
-			check: func(t *testing.T, got string) {
-				if got != "" {
-					t.Errorf("GetUserIDFromContext() = %v, want empty string", got)
+			check: func(t *testing.T, got interface{}) {
+				if got != nil {
+					t.Errorf("GetUserIDFromContext() = %v, want nil", got)
 				}
 			},
 		},
@@ -199,8 +217,9 @@ func TestSetUserIDInContext(t *testing.T) {
 			name:   "set user ID should store in context",
 			userID: "user456",
 			check: func(t *testing.T, ctx context.Context) {
-				if GetUserIDFromContext(ctx) != "user456" {
-					t.Error("User ID should be set in context")
+				got, ok := GetUserIDFromContext(ctx).(string)
+				if !ok || got != "user456" {
+					t.Errorf("GetUserIDFromContext() = %v, want user456", got)
 				}
 			},
 		},
@@ -208,8 +227,9 @@ func TestSetUserIDInContext(t *testing.T) {
 			name:   "set empty user ID should work",
 			userID: "",
 			check: func(t *testing.T, ctx context.Context) {
-				if GetUserIDFromContext(ctx) != "" {
-					t.Error("Empty user ID should be set correctly")
+				got, ok := GetUserIDFromContext(ctx).(string)
+				if !ok || got != "" {
+					t.Errorf("GetUserIDFromContext() = %v, want empty string", got)
 				}
 			},
 		},
@@ -220,8 +240,9 @@ func TestSetUserIDInContext(t *testing.T) {
 				if ctx == nil {
 					t.Error("Context should not be nil")
 				}
-				if GetUserIDFromContext(ctx) != "user789" {
-					t.Error("User ID should be set in new context")
+				got, ok := GetUserIDFromContext(ctx).(string)
+				if !ok || got != "user789" {
+					t.Errorf("GetUserIDFromContext() = %v, want user789", got)
 				}
 			},
 		},

@@ -26,10 +26,11 @@ func main() {
 	shutdownTimeout := 30 * time.Second
 	config := &aurelion.Config{
 		ServiceName:             "Demo API",
-		Port:                    8001,
+		Port:                    8000,
 		GracefulShutdownTimeout: &shutdownTimeout,
 		EnableCORS:              false,
 		VerboseLogging:          true, // Log request/response bodies for demo
+		UseProperHTTPStatus:     true, // Use proper HTTP status codes (400, 401, etc.)
 	}
 
 	// Create server with middleware options
@@ -114,7 +115,7 @@ func registerRoutes(server *aurelion.HttpServer) {
 
 	// 2. POST routes with body parsing
 	server.AddRoutes(
-		// POST with body parsing
+		// POST with manual validation (old way)
 		aurelion.NewRoute("/users").
 			POST().
 			Handler(func(ctx aurelion.Context) error {
@@ -136,6 +137,41 @@ func registerRoutes(server *aurelion.HttpServer) {
 				return ctx.Status(201).JSON(aurelion.Map{
 					"message": "User created",
 					"user":    aurelion.Map{"id": "123", "name": req.Name, "email": req.Email},
+				})
+			}),
+
+		// POST with struct validation (recommended way)
+		aurelion.NewRoute("/users/validated").
+			POST().
+			Handler(func(ctx aurelion.Context) error {
+				type CreateUserRequest struct {
+					Name  string `json:"name" validate:"required,min=3,max=50"`
+					Email string `json:"email" validate:"required,email"`
+					Age   int    `json:"age" validate:"min=18,max=100"`
+				}
+
+				var req CreateUserRequest
+
+				// Parse and validate
+				if err := aurelion.ValidateAndParse(ctx, &req); err != nil {
+					// Use ErrorWithDetails for validation errors with constants
+					if validationErr, ok := err.(aurelion.ValidationErrors); ok {
+						return aurelion.ErrorWithDetails(ctx, 400, aurelion.MsgValidationFailed, &aurelion.ErrorData{
+							Type:       aurelion.ErrorTypeValidation,
+							Validation: validationErr.ToArray(),
+						})
+					}
+					return aurelion.BadRequest(ctx, err.Error())
+				}
+
+				// Business validation
+				if req.Email == "existing@example.com" {
+					return aurelion.Error(ctx, aurelion.NewErrorf(1002, "User with email %s already exists", req.Email))
+				}
+
+				return ctx.Status(201).JSON(aurelion.Map{
+					"message": "User created with validation",
+					"user":    aurelion.Map{"id": "123", "name": req.Name, "email": req.Email, "age": req.Age},
 				})
 			}),
 	)

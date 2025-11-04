@@ -44,6 +44,12 @@ const (
 	contextKeyRequestID = "request_id"
 )
 
+// Config key
+const (
+	// contextKeyConfig is the context key for server config (internal use)
+	contextKeyConfig = "aurelion_config"
+)
+
 // Trace ID header
 const (
 	// TraceIDHeader is the header name for trace ID
@@ -67,4 +73,38 @@ const (
 	ErrUnknownError = "unknown error"
 	// ErrConfigNil is the error message when config is nil
 	ErrConfigNil = "config cannot be nil"
+)
+
+// Response messages
+const (
+	// MsgHealthCheckHealthy is the health check success message
+	MsgHealthCheckHealthy = "Server is healthy"
+	// MsgValidationFailed is the validation failure message
+	MsgValidationFailed = "Validation failed"
+)
+
+// Error type constants
+const (
+	// ErrorTypeValidation represents validation errors
+	ErrorTypeValidation = "validation_error"
+	// ErrorTypeBusiness represents business logic errors
+	ErrorTypeBusiness = "business_error"
+	// ErrorTypePermission represents permission/authorization errors
+	ErrorTypePermission = "permission_error"
+	// ErrorTypeRateLimit represents rate limiting errors
+	ErrorTypeRateLimit = "rate_limit_error"
+	// ErrorTypeExternal represents external service errors
+	ErrorTypeExternal = "external_api_error"
+	// ErrorTypeInternalServerError represents internal server errors
+	ErrorTypeInternalServerError = "internal_server_error"
+)
+
+// Health check status
+const (
+	// HealthStatusHealthy indicates the server is healthy
+	HealthStatusHealthy = "healthy"
+	// HealthStatusDegraded indicates the server is degraded
+	HealthStatusDegraded = "degraded"
+	// HealthStatusUnhealthy indicates the server is unhealthy
+	HealthStatusUnhealthy = "unhealthy"
 )

@@ -1,6 +1,7 @@
 package aurelion
 
 import (
+	"strconv"
 	"strings"
 )
 
@@ -68,7 +69,150 @@ func HeaderToLocalsMiddleware(prefix string, filter func(string) bool) Middlewar
 //
 // Example:
 //
-//	server.AddGlobalMiddlewares(DefaultHeaderToLocalsMiddleware())
+//	server, _ := aurelion.NewHttpServer(
+//	    config,
+//	    aurelion.WithGlobalMiddleware(aurelion.DefaultHeaderToLocalsMiddleware()),
+//	)
 func DefaultHeaderToLocalsMiddleware() Middleware {
 	return HeaderToLocalsMiddleware("", nil)
+}
+
+// GetHeader retrieves a header value from context Locals.
+// Headers are stored in lowercase by HeaderToLocalsMiddleware.
+//
+// Input:
+//   - ctx: The request context
+//   - headerName: The header name (case-insensitive, will be converted to lowercase)
+//   - defaultValue: Optional default value if header not found
+//
+// Output:
+//   - string: The header value, or default value if not found
+//
+// Example:
+//
+//	// Get Accept-Language header
+//	lang := aurelion.GetHeader(ctx, "Accept-Language", "en")
+//
+//	// Get custom uid header
+//	uid := aurelion.GetHeader(ctx, "uid")
+//
+//	// Get test-header
+//	testValue := aurelion.GetHeader(ctx, "test-header", "default")
+func GetHeader(ctx Context, headerName string, defaultValue ...string) string {
+	// Convert header name to lowercase for consistency
+	lowerKey := strings.ToLower(headerName)
+
+	// Try to get from Locals
+	value := ctx.Locals(lowerKey)
+	if value != nil {
+		if strValue, ok := value.(string); ok {
+			return strValue
+		}
+	}
+
+	// Return default value if provided
+	if len(defaultValue) > 0 {
+		return defaultValue[0]
+	}
+
+	// Return empty string if not found
+	return ""
+}
+
+// GetHeaderInt retrieves a header value as integer from context Locals.
+//
+// Input:
+//   - ctx: The request context
+//   - headerName: The header name (case-insensitive)
+//   - defaultValue: Default value if header not found or invalid
+//
+// Output:
+//   - int: The header value as integer, or default value if not found/invalid
+//
+// Example:
+//
+//	limit := aurelion.GetHeaderInt(ctx, "X-Rate-Limit", 100)
+//	timeout := aurelion.GetHeaderInt(ctx, "X-Timeout", 30)
+func GetHeaderInt(ctx Context, headerName string, defaultValue int) int {
+	strValue := GetHeader(ctx, headerName)
+	if strValue == "" {
+		return defaultValue
+	}
+
+	intValue, err := strconv.Atoi(strValue)
+	if err != nil {
+		return defaultValue
+	}
+
+	return intValue
+}
+
+// GetHeaderBool retrieves a header value as boolean from context Locals.
+// Accepts: "true", "1", "yes", "on" as true (case-insensitive)
+//
+// Input:
+//   - ctx: The request context
+//   - headerName: The header name (case-insensitive)
+//   - defaultValue: Default value if header not found or invalid
+//
+// Output:
+//   - bool: The header value as boolean, or default value if not found/invalid
+//
+// Example:
+//
+//	debug := aurelion.GetHeaderBool(ctx, "X-Debug", false)
+//	verbose := aurelion.GetHeaderBool(ctx, "X-Verbose", false)
+func GetHeaderBool(ctx Context, headerName string, defaultValue bool) bool {
+	strValue := strings.ToLower(GetHeader(ctx, headerName))
+	if strValue == "" {
+		return defaultValue
+	}
+
+	// Check for truthy values
+	switch strValue {
+	case "true", "1", "yes", "on":
+		return true
+	case "false", "0", "no", "off":
+		return false
+	default:
+		return defaultValue
+	}
+}
+
+// GetAllHeaders retrieves all headers from context Locals.
+// Returns a map with lowercase header names as keys.
+//
+// Input:
+//   - ctx: The request context
+//
+// Output:
+//   - map[string]string: Map of all header names and values
+//
+// Example:
+//
+//	headers := aurelion.GetAllHeaders(ctx)
+//	for name, value := range headers {
+//	    log.Printf("Header: %s = %s", name, value)
+//	}
+func GetAllHeaders(ctx Context, prefix string) map[string]string {
+	allLocals := ctx.GetAllLocals()
+	headers := make(map[string]string)
+
+	for key, value := range allLocals {
+		// If prefix is specified, only include keys with that prefix
+		if prefix != "" {
+			if !strings.HasPrefix(key, prefix) {
+				continue
+			}
+			// Remove prefix from key
+			key = strings.TrimPrefix(key, prefix)
+		}
+
+		// Only include string values
+		if strValue, ok := value.(string); ok {
+			headers[key] = strValue
+		}
+	}
+
+	return headers
 }

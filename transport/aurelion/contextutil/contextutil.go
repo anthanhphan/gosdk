@@ -2,6 +2,7 @@ package contextutil
 
 import (
 	"context"
+	"fmt"
 )
 
 // Context key types for storing values in request context
@@ -61,52 +62,140 @@ func GetContextKey(key string) interface{} {
 	}
 }
 
-// GetFromContext retrieves a value from context by string key.
-// It supports both typed keys (for predefined keys) and custom keys.
+// Get retrieves a value of any type from context by string key.
 //
 // Input:
 //   - ctx: The context.Context
 //   - key: The string key to look up
 //
 // Output:
-//   - string: The value as string, or empty string if not found
+//   - interface{}: The value, or nil if not found
 //
 // Example:
 //
-//	value := contextutil.GetFromContext(ctx, "custom_key")
-func GetFromContext(ctx context.Context, key string) string {
+//	value := contextutil.Get(ctx, "custom_key")
+//	if user, ok := value.(*User); ok {
+//	    // Use user
+//	}
+func Get(ctx context.Context, key string) interface{} {
 	if ctx == nil {
-		return ""
+		return nil
 	}
 
-	// Try typed key
 	typedKey := GetContextKey(key)
-	if value, ok := ctx.Value(typedKey).(string); ok {
-		return value
-	}
-
-	return ""
+	return ctx.Value(typedKey)
 }
 
-// SetCustomValueInContext sets a custom string value in the context and returns a new context.
-// This is useful for setting custom keys that are not in the predefined set.
+// GetFromContext retrieves a string value from context.
+// Deprecated: Use GetString(ctx, key, "") instead for better API.
+func GetFromContext(ctx context.Context, key string) string {
+	return GetString(ctx, key, "")
+}
+
+// GetString retrieves a string value with default.
 //
 // Input:
-//   - ctx: The request context.Context
-//   - key: The custom string key
-//   - value: The string value to set
+//   - ctx: The context.Context
+//   - key: The string key
+//   - defaultValue: Default if not found
 //
 // Output:
-//   - context.Context: A new context with the custom value set
+//   - string: The value or default
 //
 // Example:
 //
-//	ctx = contextutil.SetCustomValueInContext(ctx, "custom_key", "custom_value")
-func SetCustomValueInContext(ctx context.Context, key, value string) context.Context {
+//	lang := contextutil.GetString(ctx, "lang", "en")
+func GetString(ctx context.Context, key string, defaultValue string) string {
+	value := Get(ctx, key)
+	if strVal, ok := value.(string); ok && strVal != "" {
+		return strVal
+	}
+	return defaultValue
+}
+
+// GetInt retrieves an integer value from context.
+//
+// Input:
+//   - ctx: The context.Context
+//   - key: The string key
+//   - defaultValue: Default if not found or invalid type
+//
+// Output:
+//   - int: The value or default
+//
+// Example:
+//
+//	userID := contextutil.GetInt(ctx, "user_id", 0)
+func GetInt(ctx context.Context, key string, defaultValue int) int {
+	value := Get(ctx, key)
+	if intVal, ok := value.(int); ok {
+		return intVal
+	}
+	return defaultValue
+}
+
+// GetBool retrieves a boolean value from context.
+//
+// Input:
+//   - ctx: The context.Context
+//   - key: The string key
+//   - defaultValue: Default if not found or invalid type
+//
+// Output:
+//   - bool: The value or default
+//
+// Example:
+//
+//	isAdmin := contextutil.GetBool(ctx, "is_admin", false)
+func GetBool(ctx context.Context, key string, defaultValue bool) bool {
+	value := Get(ctx, key)
+	if boolVal, ok := value.(bool); ok {
+		return boolVal
+	}
+	return defaultValue
+}
+
+// Set sets a value of any type in context.
+//
+// Input:
+//   - ctx: The context.Context
+//   - key: The string key
+//   - value: The value to set
+//
+// Output:
+//   - context.Context: New context with value set
+//
+// Example:
+//
+//	ctx = contextutil.Set(ctx, "user", &User{ID: "123"})
+func Set(ctx context.Context, key string, value interface{}) context.Context {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	return context.WithValue(ctx, CustomKey(key), value)
+	typedKey := GetContextKey(key)
+	return context.WithValue(ctx, typedKey, value)
+}
+
+// Has checks if a key exists in context.
+//
+// Input:
+//   - ctx: The context.Context
+//   - key: The string key
+//
+// Output:
+//   - bool: True if key exists
+//
+// Example:
+//
+//	if contextutil.Has(ctx, "user_id") {
+//	    // User is authenticated
+//	}
+func Has(ctx context.Context, key string) bool {
+	if ctx == nil {
+		return false
+	}
+	typedKey := GetContextKey(key)
+	return ctx.Value(typedKey) != nil
 }
 
 // GetLanguageFromContext retrieves the language from the context.
@@ -133,66 +222,33 @@ func GetLanguageFromContext(ctx context.Context) string {
 	return ""
 }
 
-// SetLanguageInContext sets the language in the context and returns a new context.
-//
-// Input:
-//   - ctx: The request context.Context
-//   - lang: The language code to set
-//
-// Output:
-//   - context.Context: A new context with the language value set
-//
-// Example:
-//
-//	ctx = contextutil.SetLanguageInContext(ctx, "en")
-func SetLanguageInContext(ctx context.Context, lang string) context.Context {
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	return context.WithValue(ctx, LangKey{}, lang)
-}
-
 // GetUserIDFromContext retrieves the user ID from the context.
+// Returns the raw value (string or int64) for user to cast as needed.
 //
 // Input:
 //   - ctx: The request context.Context
 //
 // Output:
-//   - string: The user ID, or empty string if not found
+//   - interface{}: The user ID value, or nil if not found
 //
 // Example:
 //
-//	userID := contextutil.GetUserIDFromContext(ctx)
-//	if userID == "" {
+//	// Cast to string
+//	userID, ok := contextutil.GetUserIDFromContext(ctx).(string)
+//	if !ok || userID == "" {
 //	    return errors.New("User not authenticated")
 //	}
-func GetUserIDFromContext(ctx context.Context) string {
+//
+//	// Cast to int64
+//	userIDInt, ok := contextutil.GetUserIDFromContext(ctx).(int64)
+//	if !ok || userIDInt == 0 {
+//	    return errors.New("User not authenticated")
+//	}
+func GetUserIDFromContext(ctx context.Context) interface{} {
 	if ctx == nil {
-		return ""
+		return nil
 	}
-	if userID, ok := ctx.Value(UserIDKey{}).(string); ok {
-		return userID
-	}
-	return ""
-}
-
-// SetUserIDInContext sets the user ID in the context and returns a new context.
-//
-// Input:
-//   - ctx: The request context.Context
-//   - userID: The user ID to set
-//
-// Output:
-//   - context.Context: A new context with the user ID value set
-//
-// Example:
-//
-//	ctx = contextutil.SetUserIDInContext(ctx, "user123")
-func SetUserIDInContext(ctx context.Context, userID string) context.Context {
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	return context.WithValue(ctx, UserIDKey{}, userID)
+	return ctx.Value(UserIDKey{})
 }
 
 // GetRequestIDFromContext retrieves the request ID from the context.
@@ -215,25 +271,6 @@ func GetRequestIDFromContext(ctx context.Context) string {
 		return requestID
 	}
 	return ""
-}
-
-// SetRequestIDInContext sets the request ID in the context and returns a new context.
-//
-// Input:
-//   - ctx: The request context.Context
-//   - requestID: The request ID to set
-//
-// Output:
-//   - context.Context: A new context with the request ID value set
-//
-// Example:
-//
-//	ctx = contextutil.SetRequestIDInContext(ctx, "req-12345")
-func SetRequestIDInContext(ctx context.Context, requestID string) context.Context {
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	return context.WithValue(ctx, RequestIDKey{}, requestID)
 }
 
 // GetTraceIDFromContext retrieves the trace ID from the context.
@@ -261,43 +298,40 @@ func GetTraceIDFromContext(ctx context.Context) string {
 	return ""
 }
 
-// SetTraceIDInContext sets the trace ID in the context and returns a new context.
-//
-// Input:
-//   - ctx: The request context.Context
-//   - traceID: The trace ID to set
-//
-// Output:
-//   - context.Context: A new context with the trace ID value set
-//
-// Example:
-//
-//	ctx = contextutil.SetTraceIDInContext(ctx, "trace-12345")
-func SetTraceIDInContext(ctx context.Context, traceID string) context.Context {
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	return context.WithValue(ctx, TraceIDKey{}, traceID)
+// Deprecated functions - use generic Set() instead
+
+// SetCustomValueInContext sets a custom value in context.
+// Deprecated: Use Set(ctx, key, value) instead.
+func SetCustomValueInContext(ctx context.Context, key, value string) context.Context {
+	return Set(ctx, key, value)
 }
 
-// GetAllContextValues returns all string values from the context as a map.
-// This only includes values that were set using contextutil typed keys.
-// Note: context.Context doesn't support iteration, so this only returns
-// values for known keys. For all Locals values, use aurelion.Context.Locals()
-// or access them through the aurelion.Context interface.
-//
-// Input:
-//   - ctx: The context.Context to extract values from
-//
-// Output:
-//   - map[string]string: A map of all string values in the context
-//
-// Example:
-//
-//	values := contextutil.GetAllContextValues(ctx)
-//	for key, value := range values {
-//	    logger.Infow("context value", "key", key, "value", value)
-//	}
+// SetLanguageInContext sets language in context.
+// Deprecated: Use Set(ctx, KeyLanguage, lang) instead.
+func SetLanguageInContext(ctx context.Context, lang string) context.Context {
+	return Set(ctx, KeyLanguage, lang)
+}
+
+// SetUserIDInContext sets user ID in context.
+// Deprecated: Use Set(ctx, KeyUserID, userID) instead.
+func SetUserIDInContext(ctx context.Context, userID string) context.Context {
+	return Set(ctx, KeyUserID, userID)
+}
+
+// SetRequestIDInContext sets request ID in context.
+// Deprecated: Use Set(ctx, KeyRequestID, requestID) instead.
+func SetRequestIDInContext(ctx context.Context, requestID string) context.Context {
+	return Set(ctx, KeyRequestID, requestID)
+}
+
+// SetTraceIDInContext sets trace ID in context.
+// Deprecated: Use Set(ctx, KeyTraceID, traceID) instead.
+func SetTraceIDInContext(ctx context.Context, traceID string) context.Context {
+	return Set(ctx, KeyTraceID, traceID)
+}
+
+// GetAllContextValues returns all known context values.
+// Deprecated: Use Get() for specific keys instead.
 func GetAllContextValues(ctx context.Context) map[string]string {
 	if ctx == nil {
 		return make(map[string]string)
@@ -305,12 +339,24 @@ func GetAllContextValues(ctx context.Context) map[string]string {
 
 	result := make(map[string]string)
 
-	// Get all predefined keys
 	if requestID := GetRequestIDFromContext(ctx); requestID != "" {
 		result[KeyRequestID] = requestID
 	}
-	if userID := GetUserIDFromContext(ctx); userID != "" {
-		result[KeyUserID] = userID
+	if userIDValue := GetUserIDFromContext(ctx); userIDValue != nil {
+		var userIDStr string
+		switch v := userIDValue.(type) {
+		case string:
+			userIDStr = v
+		case int64:
+			userIDStr = fmt.Sprintf("%d", v)
+		case int:
+			userIDStr = fmt.Sprintf("%d", v)
+		default:
+			userIDStr = fmt.Sprintf("%v", v)
+		}
+		if userIDStr != "" {
+			result[KeyUserID] = userIDStr
+		}
 	}
 	if lang := GetLanguageFromContext(ctx); lang != "" {
 		result[KeyLanguage] = lang
@@ -318,11 +364,6 @@ func GetAllContextValues(ctx context.Context) map[string]string {
 	if traceID := GetTraceIDFromContext(ctx); traceID != "" {
 		result[KeyTraceID] = traceID
 	}
-
-	// Note: We cannot iterate through all context values because context.Context
-	// doesn't provide an iteration API. To get all custom values, access them
-	// through aurelion.Context.Locals() or use reflection to access the underlying
-	// context values.
 
 	return result
 }

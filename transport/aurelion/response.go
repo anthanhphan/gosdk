@@ -12,7 +12,16 @@ type APIResponse struct {
 	Code      int         `json:"code"`
 	Message   string      `json:"message,omitempty"`
 	Data      interface{} `json:"data,omitempty"`
+	Error     *ErrorData  `json:"error,omitempty"`
 	Timestamp int64       `json:"timestamp"`
+}
+
+// ErrorData represents flexible error information that can be extended
+type ErrorData struct {
+	Type       string                 `json:"type,omitempty"`
+	Validation []map[string]string    `json:"validation,omitempty"`
+	Details    map[string]interface{} `json:"details,omitempty"`
+	Metadata   map[string]interface{} `json:"metadata,omitempty"`
 }
 
 // BusinessError represents a business logic error with code and message
@@ -134,7 +143,9 @@ func Error(ctx Context, err error) error {
 	return InternalServerError(ctx, err.Error())
 }
 
-// BadRequest sends a bad request error response with HTTP 200 and code 400
+// BadRequest sends a bad request error response.
+// By default, returns HTTP 200 with code 400 in JSON body for backward compatibility.
+// If UseProperHTTPStatus is true in config, returns HTTP 400 status code.
 //
 // Input:
 //   - ctx: The request context
@@ -150,10 +161,13 @@ func BadRequest(ctx Context, message string) error {
 	if err := validateContext(ctx); err != nil {
 		return fmt.Errorf("%w", err)
 	}
-	return ctx.Status(http.StatusOK).JSON(buildAPIResponse(false, http.StatusBadRequest, message))
+	statusCode := determineHTTPStatus(ctx, http.StatusBadRequest)
+	return ctx.Status(statusCode).JSON(buildAPIResponse(false, http.StatusBadRequest, message))
 }
 
-// Unauthorized sends an unauthorized error response with HTTP 200 and code 401
+// Unauthorized sends an unauthorized error response.
+// By default, returns HTTP 200 with code 401 in JSON body for backward compatibility.
+// If UseProperHTTPStatus is true in config, returns HTTP 401 status code.
 //
 // Input:
 //   - ctx: The request context
@@ -169,10 +183,13 @@ func Unauthorized(ctx Context, message string) error {
 	if err := validateContext(ctx); err != nil {
 		return fmt.Errorf("%w", err)
 	}
-	return ctx.Status(http.StatusOK).JSON(buildAPIResponse(false, http.StatusUnauthorized, message))
+	statusCode := determineHTTPStatus(ctx, http.StatusUnauthorized)
+	return ctx.Status(statusCode).JSON(buildAPIResponse(false, http.StatusUnauthorized, message))
 }
 
-// Forbidden sends a forbidden error response with HTTP 200 and code 403
+// Forbidden sends a forbidden error response.
+// By default, returns HTTP 200 with code 403 in JSON body for backward compatibility.
+// If UseProperHTTPStatus is true in config, returns HTTP 403 status code.
 //
 // Input:
 //   - ctx: The request context
@@ -188,10 +205,13 @@ func Forbidden(ctx Context, message string) error {
 	if err := validateContext(ctx); err != nil {
 		return fmt.Errorf("%w", err)
 	}
-	return ctx.Status(http.StatusOK).JSON(buildAPIResponse(false, http.StatusForbidden, message))
+	statusCode := determineHTTPStatus(ctx, http.StatusForbidden)
+	return ctx.Status(statusCode).JSON(buildAPIResponse(false, http.StatusForbidden, message))
 }
 
-// NotFound sends a not found error response with HTTP 200 and code 404
+// NotFound sends a not found error response.
+// By default, returns HTTP 200 with code 404 in JSON body for backward compatibility.
+// If UseProperHTTPStatus is true in config, returns HTTP 404 status code.
 //
 // Input:
 //   - ctx: The request context
@@ -207,7 +227,8 @@ func NotFound(ctx Context, message string) error {
 	if err := validateContext(ctx); err != nil {
 		return fmt.Errorf("%w", err)
 	}
-	return ctx.Status(http.StatusOK).JSON(buildAPIResponse(false, http.StatusNotFound, message))
+	statusCode := determineHTTPStatus(ctx, http.StatusNotFound)
+	return ctx.Status(statusCode).JSON(buildAPIResponse(false, http.StatusNotFound, message))
 }
 
 // InternalServerError sends an internal server error response with HTTP 500
@@ -229,7 +250,7 @@ func InternalServerError(ctx Context, message string) error {
 	return ctx.Status(http.StatusInternalServerError).JSON(buildAPIResponse(false, http.StatusInternalServerError, message))
 }
 
-// HealthCheck sends a health check response indicating the server is healthy
+// HealthCheck sends a health check response indicating the server is healthy.
 //
 // Input:
 //   - ctx: The request context
@@ -244,9 +265,56 @@ func HealthCheck(ctx Context) error {
 	if err := validateContext(ctx); err != nil {
 		return fmt.Errorf("%w", err)
 	}
-	response := buildAPIResponse(true, http.StatusOK, "Server is healthy", Map{
-		"status":    "healthy",
+
+	response := buildAPIResponse(true, http.StatusOK, MsgHealthCheckHealthy, Map{
+		"status":    HealthStatusHealthy,
 		"timestamp": time.Now().UnixMilli(),
 	})
 	return ctx.Status(http.StatusOK).JSON(response)
+}
+
+// ErrorWithDetails sends an error response with detailed error information.
+// This is the most flexible error response function, allowing custom error data.
+// Use this when you need to provide structured error details beyond a simple message.
+//
+// Input:
+//   - ctx: The request context
+//   - code: HTTP status code for the response body
+//   - message: Human-readable error message
+//   - errorData: Structured error data (can include validation, details, metadata)
+//
+// Output:
+//   - error: Any error that occurred during response sending
+//
+// Example:
+//
+//	// Validation error
+//	return aurelion.ErrorWithDetails(ctx, 400, "Validation failed", &aurelion.ErrorData{
+//	    Type:       aurelion.ErrorTypeValidation,
+//	    Validation: validationErr.ToArray(),
+//	})
+//
+//	// Business error
+//	return aurelion.ErrorWithDetails(ctx, 409, "Email exists", &aurelion.ErrorData{
+//	    Type:    aurelion.ErrorTypeBusiness,
+//	    Details: aurelion.Map{"reason": "duplicate_email", "email": req.Email},
+//	})
+func ErrorWithDetails(ctx Context, code int, message string, errorData *ErrorData) error {
+	if err := validateContext(ctx); err != nil {
+		return fmt.Errorf("%w", err)
+	}
+
+	// Determine actual HTTP status code based on config
+	statusCode := determineHTTPStatus(ctx, code)
+
+	// Build response with error details
+	response := APIResponse{
+		Success:   false,
+		Code:      code,
+		Message:   message,
+		Error:     errorData,
+		Timestamp: time.Now().UnixMilli(),
+	}
+
+	return ctx.Status(statusCode).JSON(response)
 }

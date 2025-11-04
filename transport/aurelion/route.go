@@ -342,9 +342,16 @@ func (grb *GroupRouteBuilder) Route(route interface{}) *GroupRouteBuilder {
 	return grb
 }
 
-// convertToRoute converts various route types to a *Route pointer (internal use).
+// convertToRoute converts various route types to a *Route pointer.
 // Supports Route, *Route, and *RouteBuilder types.
 // This is a wrapper around convertToRouteType for backward compatibility.
+// Internal use only - called automatically when routes are added.
+//
+// Input:
+//   - route: The route interface to convert (RouteBuilder, *Route, or Route)
+//
+// Output:
+//   - *Route: The converted route, or nil if conversion fails
 func convertToRoute(route interface{}) *Route {
 	return convertToRouteType(route)
 }
@@ -398,7 +405,12 @@ func (r *Route) String() string {
 	return fmt.Sprintf("%s %s", r.Method, r.Path)
 }
 
-// register registers the route with the fiber app (internal use).
+// register registers the route with the fiber app.
+// Converts the route's handler chain to fiber handlers and registers them.
+// Internal use only - called automatically when routes are added to the server.
+//
+// Input:
+//   - app: The fiber application instance
 func (route *Route) register(app *fiber.App) {
 	if route == nil || app == nil {
 		return
@@ -407,7 +419,12 @@ func (route *Route) register(app *fiber.App) {
 	registerRoute(app, route.Method, route.Path, handlers)
 }
 
-// register registers the group and its routes with the fiber app (internal use).
+// register registers the group and its routes with the fiber app.
+// Creates a fiber group with the prefix and applies group middlewares.
+// Then registers all routes in the group. Internal use only.
+//
+// Input:
+//   - app: The fiber application instance
 func (group *GroupRoute) register(app *fiber.App) {
 	if group == nil || app == nil {
 		return
@@ -431,7 +448,13 @@ func (group *GroupRoute) register(app *fiber.App) {
 	}
 }
 
-// buildHandlers builds the handler chain for the route (internal use).
+// buildHandlers builds the handler chain for the route.
+// Converts route middlewares and handler to fiber handlers.
+// Returns a slice of fiber handlers in the correct order: middlewares first, then handler.
+// Internal use only - called automatically during route registration.
+//
+// Output:
+//   - []fiber.Handler: The handler chain ready for fiber registration
 func (route *Route) buildHandlers() []fiber.Handler {
 	if route == nil {
 		return nil
@@ -532,6 +555,13 @@ func (route *Route) Clone() *Route {
 
 // handlerToFiber converts our Handler type to fiber.Handler.
 // It wraps the fiber context in our custom Context interface.
+// Internal use only - called automatically during route registration.
+//
+// Input:
+//   - handler: The aurelion Handler function to convert
+//
+// Output:
+//   - fiber.Handler: The fiber-compatible handler function
 func handlerToFiber(handler Handler) fiber.Handler {
 	if handler == nil {
 		// Return a no-op handler if nil (defensive programming)
@@ -551,6 +581,13 @@ func handlerToFiber(handler Handler) fiber.Handler {
 
 // middlewareToFiber converts our Middleware type to fiber.Handler.
 // It wraps the fiber context in our custom Context interface.
+// Internal use only - called automatically during route registration.
+//
+// Input:
+//   - middleware: The aurelion Middleware function to convert
+//
+// Output:
+//   - fiber.Handler: The fiber-compatible middleware function
 func middlewareToFiber(middleware Middleware) fiber.Handler {
 	if middleware == nil {
 		// Return a pass-through middleware if nil (defensive programming)

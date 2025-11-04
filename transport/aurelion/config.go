@@ -49,6 +49,12 @@ type Config struct {
 	// When enabled, logs include request/response bodies, query parameters, and route params.
 	// This can impact performance in high-throughput scenarios.
 	VerboseLogging bool `json:"verbose_logging,omitempty" yaml:"verbose_logging,omitempty"`
+
+	// UseProperHTTPStatus determines whether to use proper HTTP status codes for error responses.
+	// If false (default for backward compatibility), all responses return HTTP 200 with error codes in JSON body.
+	// If true, responses use proper HTTP status codes (400, 401, 403, 404, 500, etc.).
+	// Recommended: true for new projects, false for existing projects to maintain compatibility.
+	UseProperHTTPStatus bool `json:"use_proper_http_status,omitempty" yaml:"use_proper_http_status,omitempty"`
 }
 
 // Validate validates server configuration

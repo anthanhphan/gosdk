@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/csrf"
 )
@@ -156,4 +157,63 @@ func buildCSRFConfig(csrfConfig *CSRFConfig) csrf.Config {
 	}
 
 	return config
+}
+
+// configMiddleware stores the server config in the request context.
+// This allows response functions to access config settings like UseProperHTTPStatus.
+//
+// Input:
+//   - config: The server configuration
+//
+// Output:
+//   - fiber.Handler: The middleware handler
+func configMiddleware(config *Config) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		if config != nil {
+			c.Locals(contextKeyConfig, config)
+		}
+		return c.Next()
+	}
+}
+
+// getConfigFromContext retrieves the server config from context.
+// Returns nil if config is not found in context.
+//
+// Input:
+//   - ctx: The request context
+//
+// Output:
+//   - *Config: The server configuration, or nil if not found
+func getConfigFromContext(ctx Context) *Config {
+	if ctx == nil {
+		return nil
+	}
+	config, ok := ctx.Locals(contextKeyConfig).(*Config)
+	if !ok {
+		return nil
+	}
+	return config
+}
+
+// determineHTTPStatus determines the appropriate HTTP status code based on server configuration.
+// If UseProperHTTPStatus is true, returns the proper HTTP status code.
+// Otherwise, returns HTTP 200 for backward compatibility.
+//
+// Input:
+//   - ctx: The request context
+//   - properStatusCode: The proper HTTP status code (e.g., 400, 401, 404, 500)
+//
+// Output:
+//   - int: The HTTP status code to use
+func determineHTTPStatus(ctx Context, properStatusCode int) int {
+	config := getConfigFromContext(ctx)
+	if config != nil && config.UseProperHTTPStatus {
+		return properStatusCode
+	}
+	// Default behavior for backward compatibility: always return 200
+	// Only exception is InternalServerError which always uses 500
+	if properStatusCode >= 500 {
+		return properStatusCode
+	}
+	return 200
 }
