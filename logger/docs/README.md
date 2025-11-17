@@ -66,7 +66,7 @@ func main() {
 type Config struct {
 	LogLevel          Level     // Log level: debug, info, warn, error
 	LogEncoding       Encoding  // Output format: json, console
-	LogOutputPaths    []string  // Output destinations (empty = console)
+	OutputPaths    []string  // Output destinations (empty = console)
 	DisableCaller     bool      // Hide caller information
 	DisableStacktrace bool      // Hide stack traces
 	IsDevelopment     bool      // Development mode settings
@@ -142,7 +142,7 @@ undo := logger.InitAsyncLogger(&logger.Config{
 	LogLevel:    logger.LevelInfo,
 	LogEncoding: logger.EncodingJSON,
 	Timezone:    "Asia/Ho_Chi_Minh",
-	LogOutputPaths: []string{"log/app.log"},
+	OutputPaths: []string{"log/app.log"},
 })
 defer undo() // Automatically flushes remaining entries
 
@@ -215,7 +215,7 @@ logger.Errorw("Database connection failed",
 config := &logger.Config{
 	LogLevel:          logger.LevelInfo,
 	LogEncoding:       logger.EncodingJSON,
-	LogOutputPaths:    []string{"log/app.log"},
+	OutputPaths:    []string{"log/app.log"},
 	DisableCaller:     false,
 	DisableStacktrace: true,
 	IsDevelopment:     false,
@@ -451,7 +451,7 @@ For applications with high logging volume, use async logger to avoid blocking:
 undo := logger.InitAsyncLogger(&logger.Config{
 	LogLevel:    logger.LevelInfo,
 	LogEncoding: logger.EncodingJSON,
-	LogOutputPaths: []string{"log/app.log"},
+	OutputPaths: []string{"log/app.log"},
 })
 defer undo()
 ```

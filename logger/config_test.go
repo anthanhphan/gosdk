@@ -65,7 +65,7 @@ func TestConfig_Validate(t *testing.T) {
 				DisableCaller:     false,
 				DisableStacktrace: false,
 				IsDevelopment:     false,
-				LogOutputPaths:    []string{},
+				OutputPaths:       []string{},
 			},
 			wantErr: false,
 		},
@@ -77,7 +77,7 @@ func TestConfig_Validate(t *testing.T) {
 				DisableCaller:     true,
 				DisableStacktrace: true,
 				IsDevelopment:     true,
-				LogOutputPaths:    []string{"app.log", "error.log"},
+				OutputPaths:       []string{"app.log", "error.log"},
 			},
 			wantErr: false,
 		},
@@ -185,7 +185,12 @@ func TestGetOutputWriters(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			writers := getOutputWriters(tt.paths)
+			writers, closers := getOutputWriters(tt.paths)
+			defer func() {
+				for _, closer := range closers {
+					_ = closer.Close()
+				}
+			}()
 			tt.check(t, writers)
 		})
 	}

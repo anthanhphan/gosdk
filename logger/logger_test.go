@@ -291,7 +291,7 @@ func TestLogger_log(t *testing.T) {
 				// Should not log because warn < error
 				logger.config.LogLevel = LevelError
 				buf.Reset()
-				logger.log(LevelWarn, "warn message", []Field{String("key", "value")}...)
+				logger.log(LevelWarn, 0, "warn message", []Field{String("key", "value")}...)
 				if buf.String() != "" {
 					t.Errorf("log() should not log warn when level is error, got %v", buf.String())
 				}
@@ -303,7 +303,7 @@ func TestLogger_log(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			buf.Reset()
-			logger.log(tt.level, tt.msg, tt.fields...)
+			logger.log(tt.level, 0, tt.msg, tt.fields...)
 			tt.check(t, buf.String())
 		})
 	}
@@ -316,7 +316,7 @@ func TestLogger_getCaller(t *testing.T) {
 	}, []io.Writer{os.Stdout})
 
 	// Test that getCaller returns valid caller info
-	caller := logger.getCaller()
+	caller := logger.getCaller(0)
 	if caller == nil {
 		t.Error("getCaller() should not return nil")
 		return
@@ -330,7 +330,7 @@ func TestLogger_getCaller(t *testing.T) {
 
 	// Test with increased callerSkip
 	logger.callerSkip = 100
-	caller = logger.getCaller()
+	caller = logger.getCaller(0)
 	// Should return nil if skip is too high
 	if caller != nil {
 		t.Logf("getCaller() with high skip returned: %v", caller)

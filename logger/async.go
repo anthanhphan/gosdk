@@ -6,22 +6,23 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"runtime"
 	"sync"
-	"time"
-
-	"github.com/anthanhphan/gosdk/utils"
 )
 
 // AsyncLogger wraps a Logger to provide asynchronous logging.
 // Log entries are queued and written in a background goroutine.
 type AsyncLogger struct {
-	logger  *Logger
+	logger *Logger
+	rt     *asyncRuntime
+}
+
+type asyncRuntime struct {
 	queue   chan *Entry
-	wg      sync.WaitGroup
+	wg      *sync.WaitGroup
 	ctx     context.Context
 	cancel  context.CancelFunc
 	stopped chan struct{}
+	writer  *Logger
 }
 
 // NewAsyncLogger creates a new async logger that wraps the given logger.
@@ -45,33 +46,39 @@ func NewAsyncLogger(logger *Logger, queueSize int) *AsyncLogger {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	al := &AsyncLogger{
-		logger:  logger,
+	rt := &asyncRuntime{
 		queue:   make(chan *Entry, queueSize),
+		wg:      &sync.WaitGroup{},
 		ctx:     ctx,
 		cancel:  cancel,
 		stopped: make(chan struct{}),
+		writer:  logger,
 	}
 
-	al.wg.Add(1)
+	al := &AsyncLogger{
+		logger: logger,
+		rt:     rt,
+	}
+
+	rt.wg.Add(1)
 	go al.worker()
 
 	return al
 }
 
 func (al *AsyncLogger) worker() {
-	defer al.wg.Done()
+	defer al.rt.wg.Done()
 
 	for {
 		select {
-		case entry := <-al.queue:
+		case entry := <-al.rt.queue:
 			if entry == nil {
 				return
 			}
-			al.logger.writeEntry(entry)
-		case <-al.ctx.Done():
+			al.rt.writer.writeEntry(entry)
+		case <-al.rt.ctx.Done():
 			al.drainQueue()
-			close(al.stopped)
+			close(al.rt.stopped)
 			return
 		}
 	}
@@ -80,58 +87,29 @@ func (al *AsyncLogger) worker() {
 func (al *AsyncLogger) drainQueue() {
 	for {
 		select {
-		case entry := <-al.queue:
+		case entry := <-al.rt.queue:
 			if entry == nil {
 				return
 			}
-			al.logger.writeEntry(entry)
+			al.rt.writer.writeEntry(entry)
 		default:
 			return
 		}
 	}
 }
 
-func (al *AsyncLogger) log(level Level, msg string, fields ...Field) {
-	if !al.logger.shouldLog(level) {
+func (al *AsyncLogger) log(level Level, skipOffset int, msg string, fields ...Field) {
+	entry := al.logger.createEntry(level, asyncCallerSkipDelta+skipOffset, msg, fields)
+	if entry == nil {
 		return
 	}
 
-	al.logger.mu.RLock()
-	defaultFieldsCount := len(al.logger.fields)
-	al.logger.mu.RUnlock()
-
-	fieldsCapacity := defaultFieldsCount + len(fields)
-	entry := &Entry{
-		Time:    time.Now(),
-		Level:   level,
-		Message: msg,
-		Fields:  make(map[string]interface{}, fieldsCapacity),
-	}
-
-	al.logger.mu.RLock()
-	for k, v := range al.logger.fields {
-		entry.Fields[k] = v
-	}
-	al.logger.mu.RUnlock()
-
-	for _, field := range fields {
-		entry.Fields[field.Key] = field.Value
-	}
-
-	if !al.logger.config.DisableCaller {
-		entry.Caller = al.getCaller()
-	}
-
-	if !al.logger.config.DisableStacktrace && level == LevelError {
-		entry.Stacktrace = al.logger.getStacktrace()
-	}
-
 	select {
-	case al.queue <- entry:
-	case <-al.ctx.Done():
-		al.logger.writeEntry(entry)
+	case al.rt.queue <- entry:
+	case <-al.rt.ctx.Done():
+		al.rt.writer.writeEntry(entry)
 	default:
-		al.logger.writeEntry(entry)
+		al.rt.writer.writeEntry(entry)
 	}
 }
 
@@ -149,7 +127,7 @@ func (al *AsyncLogger) log(level Level, msg string, fields ...Field) {
 //	asyncLogger.Debug("Processing user", "user_id", 12345, "action", "create")
 func (al *AsyncLogger) Debug(args ...interface{}) {
 	msg, fields := al.logger.formatArgs(args...)
-	al.log(LevelDebug, msg, fields...)
+	al.log(LevelDebug, 0, msg, fields...)
 }
 
 // Debugf logs a formatted message at debug level asynchronously using Printf-style formatting.
@@ -166,7 +144,7 @@ func (al *AsyncLogger) Debug(args ...interface{}) {
 //	asyncLogger.Debugf("Processing user %s with id %d", "john", 12345)
 func (al *AsyncLogger) Debugf(template string, args ...interface{}) {
 	msg := fmt.Sprintf(template, args...)
-	al.log(LevelDebug, msg)
+	al.log(LevelDebug, 0, msg)
 }
 
 // Debugw logs a message with structured key-value pairs at debug level asynchronously.
@@ -183,7 +161,7 @@ func (al *AsyncLogger) Debugf(template string, args ...interface{}) {
 //	asyncLogger.Debugw("Request received", "method", "GET", "path", "/api/users", "ip", "192.168.1.1")
 func (al *AsyncLogger) Debugw(msg string, keysAndValues ...interface{}) {
 	fields := al.logger.parseKeysAndValues(keysAndValues...)
-	al.log(LevelDebug, msg, fields...)
+	al.log(LevelDebug, 0, msg, fields...)
 }
 
 // Info logs a message at info level asynchronously.
@@ -200,7 +178,7 @@ func (al *AsyncLogger) Debugw(msg string, keysAndValues ...interface{}) {
 //	asyncLogger.Info("User created", "user_id", 12345, "email", "user@example.com")
 func (al *AsyncLogger) Info(args ...interface{}) {
 	msg, fields := al.logger.formatArgs(args...)
-	al.log(LevelInfo, msg, fields...)
+	al.log(LevelInfo, 0, msg, fields...)
 }
 
 // Infof logs a formatted message at info level asynchronously using Printf-style formatting.
@@ -217,7 +195,7 @@ func (al *AsyncLogger) Info(args ...interface{}) {
 //	asyncLogger.Infof("User %s logged in with id %d", "john", 12345)
 func (al *AsyncLogger) Infof(template string, args ...interface{}) {
 	msg := fmt.Sprintf(template, args...)
-	al.log(LevelInfo, msg)
+	al.log(LevelInfo, 0, msg)
 }
 
 // Infow logs a message with structured key-value pairs at info level asynchronously.
@@ -234,7 +212,7 @@ func (al *AsyncLogger) Infof(template string, args ...interface{}) {
 //	asyncLogger.Infow("User created", "user_id", 12345, "email", "user@example.com")
 func (al *AsyncLogger) Infow(msg string, keysAndValues ...interface{}) {
 	fields := al.logger.parseKeysAndValues(keysAndValues...)
-	al.log(LevelInfo, msg, fields...)
+	al.log(LevelInfo, 0, msg, fields...)
 }
 
 // Warn logs a message at warning level asynchronously.
@@ -251,7 +229,7 @@ func (al *AsyncLogger) Infow(msg string, keysAndValues ...interface{}) {
 //	asyncLogger.Warn("Connection slow", "duration_ms", 1500, "host", "database.example.com")
 func (al *AsyncLogger) Warn(args ...interface{}) {
 	msg, fields := al.logger.formatArgs(args...)
-	al.log(LevelWarn, msg, fields...)
+	al.log(LevelWarn, 0, msg, fields...)
 }
 
 // Warnf logs a formatted message at warning level asynchronously using Printf-style formatting.
@@ -268,7 +246,7 @@ func (al *AsyncLogger) Warn(args ...interface{}) {
 //	asyncLogger.Warnf("Connection attempt %d of %d failed", attempt, maxAttempts)
 func (al *AsyncLogger) Warnf(template string, args ...interface{}) {
 	msg := fmt.Sprintf(template, args...)
-	al.log(LevelWarn, msg)
+	al.log(LevelWarn, 0, msg)
 }
 
 // Warnw logs a message with structured key-value pairs at warning level asynchronously.
@@ -285,7 +263,7 @@ func (al *AsyncLogger) Warnf(template string, args ...interface{}) {
 //	asyncLogger.Warnw("Slow query detected", "query", "SELECT * FROM users", "duration_ms", 1500)
 func (al *AsyncLogger) Warnw(msg string, keysAndValues ...interface{}) {
 	fields := al.logger.parseKeysAndValues(keysAndValues...)
-	al.log(LevelWarn, msg, fields...)
+	al.log(LevelWarn, 0, msg, fields...)
 }
 
 // Error logs a message at error level asynchronously.
@@ -302,7 +280,7 @@ func (al *AsyncLogger) Warnw(msg string, keysAndValues ...interface{}) {
 //	asyncLogger.Error("Database error", "error", err.Error(), "operation", "fetch_user")
 func (al *AsyncLogger) Error(args ...interface{}) {
 	msg, fields := al.logger.formatArgs(args...)
-	al.log(LevelError, msg, fields...)
+	al.log(LevelError, 0, msg, fields...)
 }
 
 // Errorf logs a formatted message at error level asynchronously using Printf-style formatting.
@@ -319,7 +297,7 @@ func (al *AsyncLogger) Error(args ...interface{}) {
 //	asyncLogger.Errorf("Failed to connect to %s on port %d", "database", 5432)
 func (al *AsyncLogger) Errorf(template string, args ...interface{}) {
 	msg := fmt.Sprintf(template, args...)
-	al.log(LevelError, msg)
+	al.log(LevelError, 0, msg)
 }
 
 // Errorw logs a message with structured key-value pairs at error level asynchronously.
@@ -336,7 +314,7 @@ func (al *AsyncLogger) Errorf(template string, args ...interface{}) {
 //	asyncLogger.Errorw("Database connection failed", "error", err.Error(), "host", "localhost", "port", 5432)
 func (al *AsyncLogger) Errorw(msg string, keysAndValues ...interface{}) {
 	fields := al.logger.parseKeysAndValues(keysAndValues...)
-	al.log(LevelError, msg, fields...)
+	al.log(LevelError, 0, msg, fields...)
 }
 
 // Fatal logs a message at error level and then exits the program with os.Exit(1).
@@ -354,9 +332,7 @@ func (al *AsyncLogger) Errorw(msg string, keysAndValues ...interface{}) {
 //	asyncLogger.Fatal("Database connection failed", "error", err.Error())
 func (al *AsyncLogger) Fatal(args ...interface{}) {
 	msg, fields := al.logger.formatArgs(args...)
-	al.logger.log(LevelError, msg, fields...)
-	al.Flush()
-	os.Exit(1)
+	al.fatalWithSkip(0, msg, fields)
 }
 
 // Fatalf logs a formatted message at error level and then exits the program with os.Exit(1).
@@ -374,24 +350,16 @@ func (al *AsyncLogger) Fatal(args ...interface{}) {
 //	asyncLogger.Fatalf("Failed to start server on port %d: %v", 8080, err)
 func (al *AsyncLogger) Fatalf(template string, args ...interface{}) {
 	msg := fmt.Sprintf(template, args...)
-	al.logger.log(LevelError, msg)
-	al.Flush()
-	os.Exit(1)
+	al.fatalWithSkip(0, msg, nil)
 }
 
-func (al *AsyncLogger) getCaller() *CallerInfo {
-	skip := 4 + al.logger.callerSkip
-	_, file, line, ok := runtime.Caller(skip)
-	if !ok {
-		return nil
+func (al *AsyncLogger) fatalWithSkip(skipOffset int, msg string, fields []Field) {
+	entry := al.logger.createEntry(LevelError, asyncCallerSkipDelta+skipOffset, msg, fields)
+	if entry != nil {
+		al.rt.writer.writeEntry(entry)
 	}
-
-	shortPath := utils.GetShortPath(file)
-
-	return &CallerInfo{
-		File: shortPath,
-		Line: line,
-	}
+	al.Flush()
+	os.Exit(1)
 }
 
 // With creates a new async logger instance with additional fields that will be included in all log messages.
@@ -409,11 +377,8 @@ func (al *AsyncLogger) getCaller() *CallerInfo {
 //	serviceAsyncLogger.Info("User created") // Will include "service": "user-service" in all logs
 func (al *AsyncLogger) With(fields ...Field) *AsyncLogger {
 	return &AsyncLogger{
-		logger:  al.logger.With(fields...),
-		queue:   al.queue,
-		ctx:     al.ctx,
-		cancel:  al.cancel,
-		stopped: al.stopped,
+		logger: al.logger.With(fields...),
+		rt:     al.rt,
 	}
 }
 
@@ -430,16 +395,21 @@ func (al *AsyncLogger) With(fields ...Field) *AsyncLogger {
 //
 //	defer asyncLogger.Flush() // Ensure all logs are written before exit
 func (al *AsyncLogger) Flush() {
-	select {
-	case <-al.ctx.Done():
-	default:
-		al.cancel()
+	if al == nil || al.rt == nil {
+		return
 	}
-	al.wg.Wait()
 	select {
-	case <-al.stopped:
+	case <-al.rt.ctx.Done():
 	default:
+		al.rt.cancel()
 	}
+	al.rt.wg.Wait()
+	select {
+	case <-al.rt.stopped:
+	default:
+		<-al.rt.stopped
+	}
+	al.rt.writer.flushOutputs()
 }
 
 // Close stops the async logger and flushes all remaining entries.

@@ -4,6 +4,7 @@ package logger
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -67,24 +68,23 @@ func (e *JSONEncoder) Encode(entry *Entry) string {
 
 	builder.WriteByte('{')
 
-	tsValue := entryTime.Format(time.RFC3339Nano)
-	tsJSON, _ := json.Marshal(tsValue)
-	builder.WriteString(`"` + LogEncoderTimeKey + `":`)
-	builder.Write(tsJSON)
+	builder.WriteString(`"` + LogEncoderTimeKey + `":"`)
+	builder.WriteString(entryTime.Format(time.RFC3339Nano))
+	builder.WriteByte('"')
 
 	if entry.Caller != nil {
 		builder.WriteByte(',')
-		callerValue := fmt.Sprintf("%s:%d", entry.Caller.File, entry.Caller.Line)
-		callerJSON, _ := json.Marshal(callerValue)
-		builder.WriteString(`"` + LogEncoderCallerKey + `":`)
-		builder.Write(callerJSON)
+		builder.WriteString(`"` + LogEncoderCallerKey + `":"`)
+		builder.WriteString(entry.Caller.File)
+		builder.WriteByte(':')
+		builder.WriteString(strconv.Itoa(entry.Caller.Line))
+		builder.WriteByte('"')
 	}
 
 	builder.WriteByte(',')
-	levelValue := strings.ToLower(string(entry.Level))
-	levelJSON, _ := json.Marshal(levelValue)
-	builder.WriteString(`"` + LogEncoderLevelKey + `":`)
-	builder.Write(levelJSON)
+	builder.WriteString(`"` + LogEncoderLevelKey + `":"`)
+	builder.WriteString(strings.ToLower(string(entry.Level)))
+	builder.WriteByte('"')
 
 	builder.WriteByte(',')
 	msgJSON, _ := json.Marshal(entry.Message)
@@ -184,7 +184,7 @@ func (e *ConsoleEncoder) Encode(entry *Entry) string {
 		builder.WriteByte('\t')
 		builder.WriteString(entry.Caller.File)
 		builder.WriteByte(':')
-		builder.WriteString(fmt.Sprintf("%d", entry.Caller.Line))
+		builder.WriteString(strconv.Itoa(entry.Caller.Line))
 	}
 
 	builder.WriteByte('\t')

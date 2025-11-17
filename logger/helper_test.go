@@ -5,6 +5,8 @@ package logger
 import (
 	"strings"
 	"testing"
+
+	"github.com/anthanhphan/gosdk/utils"
 )
 
 func TestBuildLoggerConfig(t *testing.T) {
@@ -22,7 +24,7 @@ func TestBuildLoggerConfig(t *testing.T) {
 				DisableCaller:     false,
 				DisableStacktrace: false,
 				IsDevelopment:     true,
-				LogOutputPaths:    []string{},
+				OutputPaths:       []string{},
 			},
 			defaultFields: []Field{},
 			check: func(t *testing.T, logger *Logger) {
@@ -51,7 +53,7 @@ func TestBuildLoggerConfig(t *testing.T) {
 				DisableCaller:     false,
 				DisableStacktrace: true,
 				IsDevelopment:     false,
-				LogOutputPaths:    []string{"log/app.log"},
+				OutputPaths:       []string{"log/app.log"},
 			},
 			defaultFields: []Field{},
 			check: func(t *testing.T, logger *Logger) {
@@ -80,7 +82,7 @@ func TestBuildLoggerConfig(t *testing.T) {
 				DisableCaller:     true,
 				DisableStacktrace: false,
 				IsDevelopment:     false,
-				LogOutputPaths:    []string{},
+				OutputPaths:       []string{},
 			},
 			defaultFields: []Field{
 				String("app", "test"),
@@ -139,7 +141,7 @@ func TestGetShortPathForCaller(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := getShortPathForCaller(tt.fullPath)
+			result := utils.GetShortPath(tt.fullPath)
 			tt.check(t, result)
 		})
 	}

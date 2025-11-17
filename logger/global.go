@@ -3,7 +3,9 @@
 package logger
 
 import (
+	"fmt"
 	"log"
+	"os"
 	"sync"
 )
 
@@ -37,15 +39,19 @@ var (
 //	)
 //	defer undo()
 func InitLogger(config *Config, defaultLogFields ...Field) func() {
-	var undo func()
-
+	undo := func() {}
 	once.Do(func() {
 		if err := config.Validate(); err != nil {
 			log.Fatalf("invalid logger config: %v", err)
 		}
 
 		loggerInstance = buildLoggerConfig(config, defaultLogFields...)
+		current := loggerInstance
 		undo = func() {
+			if current != nil {
+				current.flushOutputs()
+				current.closeOutputs()
+			}
 			loggerInstance = nil
 			once = sync.Once{}
 		}
@@ -54,7 +60,24 @@ func InitLogger(config *Config, defaultLogFields ...Field) func() {
 	return undo
 }
 
+// InitDevelopmentLogger initializes the logger with the development configuration.
+//
+// Input:
+//   - None
+//
+// Output:
+//   - func(): Cleanup function to restore global logger state
+//
+// Example:
+//
+//	undo := InitDevelopmentLogger()
+//	defer undo()
+func InitDevelopmentLogger() func() {
+	return InitLogger(&DevelopmentConfig)
+}
+
 // InitDefaultLogger initializes the logger with default configuration.
+// Deprecated: Use InitDevelopmentLogger instead.
 //
 // Input:
 //   - None
@@ -67,7 +90,7 @@ func InitLogger(config *Config, defaultLogFields ...Field) func() {
 //	undo := InitDefaultLogger()
 //	defer undo()
 func InitDefaultLogger() func() {
-	return InitLogger(&DefaultConfig)
+	return InitDevelopmentLogger()
 }
 
 // InitProductionLogger initializes the logger with production configuration.
@@ -109,8 +132,7 @@ func InitProductionLogger() func() {
 //	)
 //	defer undo()
 func InitAsyncLogger(config *Config, defaultLogFields ...Field) func() {
-	var undo func()
-
+	undo := func() {}
 	asyncOnce.Do(func() {
 		if err := config.Validate(); err != nil {
 			log.Fatalf("invalid logger config: %v", err)
@@ -121,8 +143,11 @@ func InitAsyncLogger(config *Config, defaultLogFields ...Field) func() {
 		undo = func() {
 			if asyncLoggerInstance != nil {
 				asyncLoggerInstance.Flush()
+				asyncLoggerInstance = nil
 			}
-			asyncLoggerInstance = nil
+			if baseLogger != nil {
+				baseLogger.closeOutputs()
+			}
 			asyncOnce = sync.Once{}
 		}
 	})
@@ -146,10 +171,7 @@ func InitAsyncLogger(config *Config, defaultLogFields ...Field) func() {
 //	)
 //	logger.Info("User created successfully", "user_id", 123)
 func NewLoggerWithFields(fields ...Field) *Logger {
-	if loggerInstance == nil {
-		InitDefaultLogger()
-	}
-	return loggerInstance.With(fields...)
+	return ensureGlobalLogger().With(fields...)
 }
 
 // Debug logs a message at debug level using the global logger.
@@ -166,14 +188,7 @@ func NewLoggerWithFields(fields ...Field) *Logger {
 //	logger.Debug("Processing request")
 //	logger.Debug("User", "john", "logged in")
 func Debug(args ...interface{}) {
-	if asyncLoggerInstance != nil {
-		asyncLoggerInstance.Debug(args...)
-		return
-	}
-	if loggerInstance == nil {
-		InitDefaultLogger()
-	}
-	loggerInstance.WithOptions(AddCallerSkip(1)).Debug(args...)
+	logGlobalArgs(LevelDebug, args...)
 }
 
 // Debugf logs a formatted message at debug level using the global logger.
@@ -190,14 +205,7 @@ func Debug(args ...interface{}) {
 //
 //	logger.Debugf("User %s logged in with id %d", "john", 12345)
 func Debugf(template string, args ...interface{}) {
-	if asyncLoggerInstance != nil {
-		asyncLoggerInstance.Debugf(template, args...)
-		return
-	}
-	if loggerInstance == nil {
-		InitDefaultLogger()
-	}
-	loggerInstance.WithOptions(AddCallerSkip(1)).Debugf(template, args...)
+	logGlobalFormatted(LevelDebug, template, args...)
 }
 
 // Debugw logs a message with structured key-value pairs at debug level using the global logger.
@@ -214,14 +222,7 @@ func Debugf(template string, args ...interface{}) {
 //
 //	logger.Debugw("Request received", "method", "GET", "path", "/api/users")
 func Debugw(msg string, keysAndValues ...interface{}) {
-	if asyncLoggerInstance != nil {
-		asyncLoggerInstance.Debugw(msg, keysAndValues...)
-		return
-	}
-	if loggerInstance == nil {
-		InitDefaultLogger()
-	}
-	loggerInstance.WithOptions(AddCallerSkip(1)).Debugw(msg, keysAndValues...)
+	logGlobalStructured(LevelDebug, msg, keysAndValues...)
 }
 
 // Info logs a message at info level using the global logger.
@@ -238,14 +239,7 @@ func Debugw(msg string, keysAndValues ...interface{}) {
 //	logger.Info("Application started")
 //	logger.Info("Service ready on port", 8080)
 func Info(args ...interface{}) {
-	if asyncLoggerInstance != nil {
-		asyncLoggerInstance.Info(args...)
-		return
-	}
-	if loggerInstance == nil {
-		InitDefaultLogger()
-	}
-	loggerInstance.WithOptions(AddCallerSkip(1)).Info(args...)
+	logGlobalArgs(LevelInfo, args...)
 }
 
 // Infof logs a formatted message at info level using the global logger.
@@ -262,14 +256,7 @@ func Info(args ...interface{}) {
 //
 //	logger.Infof("User %s created with id %d", "jane", 456)
 func Infof(template string, args ...interface{}) {
-	if asyncLoggerInstance != nil {
-		asyncLoggerInstance.Infof(template, args...)
-		return
-	}
-	if loggerInstance == nil {
-		InitDefaultLogger()
-	}
-	loggerInstance.WithOptions(AddCallerSkip(1)).Infof(template, args...)
+	logGlobalFormatted(LevelInfo, template, args...)
 }
 
 // Infow logs a message with structured key-value pairs at info level using the global logger.
@@ -286,14 +273,7 @@ func Infof(template string, args ...interface{}) {
 //
 //	logger.Infow("User created", "user_id", 12345, "email", "user@example.com")
 func Infow(msg string, keysAndValues ...interface{}) {
-	if asyncLoggerInstance != nil {
-		asyncLoggerInstance.Infow(msg, keysAndValues...)
-		return
-	}
-	if loggerInstance == nil {
-		InitDefaultLogger()
-	}
-	loggerInstance.WithOptions(AddCallerSkip(1)).Infow(msg, keysAndValues...)
+	logGlobalStructured(LevelInfo, msg, keysAndValues...)
 }
 
 // Warn logs a message at warning level using the global logger.
@@ -310,14 +290,7 @@ func Infow(msg string, keysAndValues ...interface{}) {
 //	logger.Warn("Connection timeout")
 //	logger.Warn("Retry attempt", 3, "of", 5)
 func Warn(args ...interface{}) {
-	if asyncLoggerInstance != nil {
-		asyncLoggerInstance.Warn(args...)
-		return
-	}
-	if loggerInstance == nil {
-		InitDefaultLogger()
-	}
-	loggerInstance.WithOptions(AddCallerSkip(1)).Warn(args...)
+	logGlobalArgs(LevelWarn, args...)
 }
 
 // Warnf logs a formatted message at warning level using the global logger.
@@ -334,14 +307,7 @@ func Warn(args ...interface{}) {
 //
 //	logger.Warnf("Connection to %s failed after %d retries", "localhost", 3)
 func Warnf(template string, args ...interface{}) {
-	if asyncLoggerInstance != nil {
-		asyncLoggerInstance.Warnf(template, args...)
-		return
-	}
-	if loggerInstance == nil {
-		InitDefaultLogger()
-	}
-	loggerInstance.WithOptions(AddCallerSkip(1)).Warnf(template, args...)
+	logGlobalFormatted(LevelWarn, template, args...)
 }
 
 // Warnw logs a message with structured key-value pairs at warning level using the global logger.
@@ -358,14 +324,7 @@ func Warnf(template string, args ...interface{}) {
 //
 //	logger.Warnw("Slow query detected", "query", "SELECT * FROM users", "duration_ms", 1500)
 func Warnw(msg string, keysAndValues ...interface{}) {
-	if asyncLoggerInstance != nil {
-		asyncLoggerInstance.Warnw(msg, keysAndValues...)
-		return
-	}
-	if loggerInstance == nil {
-		InitDefaultLogger()
-	}
-	loggerInstance.WithOptions(AddCallerSkip(1)).Warnw(msg, keysAndValues...)
+	logGlobalStructured(LevelWarn, msg, keysAndValues...)
 }
 
 // Error logs a message at error level using the global logger.
@@ -382,14 +341,7 @@ func Warnw(msg string, keysAndValues ...interface{}) {
 //	logger.Error("Database connection failed")
 //	logger.Error("Failed to process request:", err)
 func Error(args ...interface{}) {
-	if asyncLoggerInstance != nil {
-		asyncLoggerInstance.Error(args...)
-		return
-	}
-	if loggerInstance == nil {
-		InitDefaultLogger()
-	}
-	loggerInstance.WithOptions(AddCallerSkip(1)).Error(args...)
+	logGlobalArgs(LevelError, args...)
 }
 
 // Errorf logs a formatted message at error level using the global logger.
@@ -406,14 +358,7 @@ func Error(args ...interface{}) {
 //
 //	logger.Errorf("Failed to connect to %s on port %d", "database", 5432)
 func Errorf(template string, args ...interface{}) {
-	if asyncLoggerInstance != nil {
-		asyncLoggerInstance.Errorf(template, args...)
-		return
-	}
-	if loggerInstance == nil {
-		InitDefaultLogger()
-	}
-	loggerInstance.WithOptions(AddCallerSkip(1)).Errorf(template, args...)
+	logGlobalFormatted(LevelError, template, args...)
 }
 
 // Errorw logs a message with structured key-value pairs at error level using the global logger.
@@ -430,14 +375,7 @@ func Errorf(template string, args ...interface{}) {
 //
 //	logger.Errorw("Request failed", "error", err.Error(), "retry", 3)
 func Errorw(msg string, keysAndValues ...interface{}) {
-	if asyncLoggerInstance != nil {
-		asyncLoggerInstance.Errorw(msg, keysAndValues...)
-		return
-	}
-	if loggerInstance == nil {
-		InitDefaultLogger()
-	}
-	loggerInstance.WithOptions(AddCallerSkip(1)).Errorw(msg, keysAndValues...)
+	logGlobalStructured(LevelError, msg, keysAndValues...)
 }
 
 // Fatal logs a message at error level using the global logger and then exits the program with os.Exit(1).
@@ -454,14 +392,7 @@ func Errorw(msg string, keysAndValues ...interface{}) {
 //	logger.Fatal("Critical error occurred")
 //	logger.Fatal("Database connection failed:", err)
 func Fatal(args ...interface{}) {
-	if asyncLoggerInstance != nil {
-		asyncLoggerInstance.Fatal(args...)
-		return
-	}
-	if loggerInstance == nil {
-		InitDefaultLogger()
-	}
-	loggerInstance.WithOptions(AddCallerSkip(1)).Fatal(args...)
+	fatalGlobal(args...)
 }
 
 // Fatalf logs a formatted message at error level using the global logger and then exits the program with os.Exit(1).
@@ -478,14 +409,7 @@ func Fatal(args ...interface{}) {
 //
 //	logger.Fatalf("Failed to start server on port %d: %v", 8080, err)
 func Fatalf(template string, args ...interface{}) {
-	if asyncLoggerInstance != nil {
-		asyncLoggerInstance.Fatalf(template, args...)
-		return
-	}
-	if loggerInstance == nil {
-		InitDefaultLogger()
-	}
-	loggerInstance.WithOptions(AddCallerSkip(1)).Fatalf(template, args...)
+	fatalGlobalf(template, args...)
 }
 
 // Flush waits for all queued log entries to be written (for async logger).
@@ -504,4 +428,71 @@ func Flush() {
 	if asyncLoggerInstance != nil {
 		asyncLoggerInstance.Flush()
 	}
+	if loggerInstance != nil {
+		loggerInstance.flushOutputs()
+	}
+}
+
+func ensureGlobalLogger() *Logger {
+	if loggerInstance == nil {
+		InitDevelopmentLogger()
+	}
+	return loggerInstance
+}
+
+func logGlobalArgs(level Level, args ...interface{}) {
+	if async := asyncLoggerInstance; async != nil {
+		msg, fields := async.logger.formatArgs(args...)
+		async.log(level, globalCallerSkip, msg, fields...)
+		return
+	}
+	logger := ensureGlobalLogger()
+	msg, fields := logger.formatArgs(args...)
+	logger.log(level, globalCallerSkip, msg, fields...)
+}
+
+func logGlobalFormatted(level Level, template string, args ...interface{}) {
+	msg := fmt.Sprintf(template, args...)
+	if async := asyncLoggerInstance; async != nil {
+		async.log(level, globalCallerSkip, msg)
+		return
+	}
+	ensureGlobalLogger().log(level, globalCallerSkip, msg)
+}
+
+func logGlobalStructured(level Level, msg string, keysAndValues ...interface{}) {
+	if async := asyncLoggerInstance; async != nil {
+		fields := async.logger.parseKeysAndValues(keysAndValues...)
+		async.log(level, globalCallerSkip, msg, fields...)
+		return
+	}
+	logger := ensureGlobalLogger()
+	fields := logger.parseKeysAndValues(keysAndValues...)
+	logger.log(level, globalCallerSkip, msg, fields...)
+}
+
+func fatalGlobal(args ...interface{}) {
+	if async := asyncLoggerInstance; async != nil {
+		msg, fields := async.logger.formatArgs(args...)
+		async.fatalWithSkip(globalCallerSkip, msg, fields)
+		return
+	}
+	logger := ensureGlobalLogger()
+	msg, fields := logger.formatArgs(args...)
+	logger.log(LevelError, globalCallerSkip, msg, fields...)
+	logger.flushOutputs()
+	os.Exit(1)
+}
+
+func fatalGlobalf(template string, args ...interface{}) {
+	if async := asyncLoggerInstance; async != nil {
+		msg := fmt.Sprintf(template, args...)
+		async.fatalWithSkip(globalCallerSkip, msg, nil)
+		return
+	}
+	logger := ensureGlobalLogger()
+	msg := fmt.Sprintf(template, args...)
+	logger.log(LevelError, globalCallerSkip, msg)
+	logger.flushOutputs()
+	os.Exit(1)
 }

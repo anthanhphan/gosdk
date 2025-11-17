@@ -25,7 +25,7 @@ func TestInitLogger(t *testing.T) {
 				DisableCaller:     false,
 				DisableStacktrace: false,
 				IsDevelopment:     false,
-				LogOutputPaths:    []string{},
+				OutputPaths:       []string{},
 			},
 			defaultFields: []Field{
 				String("app_name", "test-app"),
@@ -45,7 +45,7 @@ func TestInitLogger(t *testing.T) {
 				DisableCaller:     false,
 				DisableStacktrace: false,
 				IsDevelopment:     true,
-				LogOutputPaths:    []string{},
+				OutputPaths:       []string{},
 			},
 			defaultFields: []Field{},
 			check: func(t *testing.T) {
@@ -270,9 +270,9 @@ func TestFatalZapBuildError(t *testing.T) {
 	// This should call log.Fatalf and exit
 	// We can't easily trigger zap.Build() to fail, so this test is more theoretical
 	InitLogger(&Config{
-		LogLevel:       LevelInfo,
-		LogEncoding:    EncodingJSON,
-		LogOutputPaths: []string{"/dev/null/invalid/path/that/should/not/exist"},
+		LogLevel:    LevelInfo,
+		LogEncoding: EncodingJSON,
+		OutputPaths: []string{"/dev/null/invalid/path/that/should/not/exist"},
 	})
 }
 
@@ -1023,7 +1023,7 @@ func TestInitAsyncLogger(t *testing.T) {
 				DisableCaller:     false,
 				DisableStacktrace: false,
 				IsDevelopment:     false,
-				LogOutputPaths:    []string{},
+				OutputPaths:       []string{},
 			},
 			defaultFields: []Field{
 				String("app_name", "test-app"),
@@ -1043,7 +1043,7 @@ func TestInitAsyncLogger(t *testing.T) {
 				DisableCaller:     false,
 				DisableStacktrace: false,
 				IsDevelopment:     true,
-				LogOutputPaths:    []string{},
+				OutputPaths:       []string{},
 			},
 			defaultFields: []Field{},
 			check: func(t *testing.T) {

@@ -5,23 +5,41 @@ package logger
 // Level represents the log level for filtering log messages.
 type Level string
 
+var validLevels = map[Level]struct{}{
+	LevelDebug: {},
+	LevelInfo:  {},
+	LevelWarn:  {},
+	LevelError: {},
+}
+
+var levelValuesCache = []string{"debug", "info", "warn", "error"}
+
 func (l Level) isValid() bool {
-	return l == LevelDebug || l == LevelInfo || l == LevelWarn || l == LevelError
+	_, ok := validLevels[l]
+	return ok
 }
 
 func levelValues() []string {
-	return []string{string(LevelDebug), string(LevelInfo), string(LevelWarn), string(LevelError)}
+	return levelValuesCache
 }
 
 // Encoding represents the output format for log messages.
 type Encoding string
 
+var validEncodings = map[Encoding]struct{}{
+	EncodingJSON:    {},
+	EncodingConsole: {},
+}
+
+var encodingValuesCache = []string{"json", "console"}
+
 func (e Encoding) isValid() bool {
-	return e == EncodingJSON || e == EncodingConsole
+	_, ok := validEncodings[e]
+	return ok
 }
 
 func encodingValues() []string {
-	return []string{string(EncodingJSON), string(EncodingConsole)}
+	return encodingValuesCache
 }
 
 // Log level constants for filtering log messages.
@@ -60,16 +78,20 @@ const (
 	LogEncoderStacktraceKey = "stacktrace"
 )
 
-// DefaultConfig provides a pre-configured logger setup optimized for development.
+// DevelopmentConfig provides a pre-configured logger setup optimized for development.
 // It enables debug level logging, includes caller information and stack traces,
 // and uses JSON encoding for structured output.
-var DefaultConfig = Config{
+var DevelopmentConfig = Config{
 	LogLevel:          LevelDebug,
 	LogEncoding:       EncodingJSON,
 	DisableCaller:     false,
 	DisableStacktrace: false,
 	IsDevelopment:     true,
 }
+
+// DefaultConfig is kept for backward compatibility.
+// Deprecated: Use DevelopmentConfig instead.
+var DefaultConfig = DevelopmentConfig
 
 // ProductionConfig provides a pre-configured logger setup optimized for production.
 // It uses info level logging, disables stack traces for performance,

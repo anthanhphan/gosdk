@@ -29,8 +29,8 @@ type Config struct {
 	// IsDevelopment enables development mode with more verbose output and human-readable formatting.
 	IsDevelopment bool `yaml:"is_development" json:"is_development"`
 
-	// LogOutputPaths specifies file paths to write log output to. If empty, logs to console.
-	LogOutputPaths []string `yaml:"log_output_paths" json:"log_output_paths"`
+	// OutputPaths specifies file paths to write log output to. If empty, logs to console.
+	OutputPaths []string `yaml:"log_output_paths" json:"log_output_paths"`
 
 	// Timezone specifies the timezone for timestamp formatting. If empty, uses UTC.
 	// Must be a valid IANA timezone name (e.g., "America/New_York", "Asia/Tokyo", "UTC").
@@ -75,16 +75,19 @@ func (c *Config) Validate() error {
 }
 
 func buildLoggerConfig(config *Config, defaultFields ...Field) *Logger {
-	outputs := getOutputWriters(config.LogOutputPaths)
-	return NewLogger(config, outputs, defaultFields...)
+	outputs, closers := getOutputWriters(config.OutputPaths)
+	logger := NewLogger(config, outputs, defaultFields...)
+	logger.setClosers(closers)
+	return logger
 }
 
-func getOutputWriters(paths []string) []io.Writer {
+func getOutputWriters(paths []string) ([]io.Writer, []io.Closer) {
 	if len(paths) == 0 {
-		return []io.Writer{os.Stdout}
+		return []io.Writer{os.Stdout}, nil
 	}
 
 	writers := make([]io.Writer, 0, len(paths))
+	closers := make([]io.Closer, 0, len(paths))
 	for _, path := range paths {
 		switch path {
 		case "stdout", "":
@@ -97,17 +100,14 @@ func getOutputWriters(paths []string) []io.Writer {
 				writers = append(writers, os.Stdout)
 			} else {
 				writers = append(writers, file)
+				closers = append(closers, file)
 			}
 		}
 	}
 
 	if len(writers) == 0 {
-		return []io.Writer{os.Stdout}
+		return []io.Writer{os.Stdout}, nil
 	}
 
-	return writers
-}
-
-func getShortPathForCaller(fullPath string) string {
-	return utils.GetShortPath(fullPath)
+	return writers, closers
 }

@@ -30,11 +30,11 @@ func TestNewAsyncLogger(t *testing.T) {
 				if al.logger == nil {
 					t.Error("NewAsyncLogger() logger should not be nil")
 				}
-				if al.queue == nil {
+				if al.rt == nil || al.rt.queue == nil {
 					t.Error("NewAsyncLogger() queue should not be nil")
 				}
-				if cap(al.queue) != 50 {
-					t.Errorf("NewAsyncLogger() queue capacity = %v, want %v", cap(al.queue), 50)
+				if cap(al.rt.queue) != 50 {
+					t.Errorf("NewAsyncLogger() queue capacity = %v, want %v", cap(al.rt.queue), 50)
 				}
 			},
 		},
@@ -49,8 +49,11 @@ func TestNewAsyncLogger(t *testing.T) {
 				if al == nil {
 					t.Fatal("NewAsyncLogger() should not return nil")
 				}
-				if cap(al.queue) != 100 {
-					t.Errorf("NewAsyncLogger() queue capacity = %v, want %v (default)", cap(al.queue), 100)
+				if al.rt == nil || al.rt.queue == nil {
+					t.Fatal("NewAsyncLogger() queue should not be nil")
+				}
+				if cap(al.rt.queue) != 100 {
+					t.Errorf("NewAsyncLogger() queue capacity = %v, want %v (default)", cap(al.rt.queue), 100)
 				}
 			},
 		},
@@ -65,8 +68,11 @@ func TestNewAsyncLogger(t *testing.T) {
 				if al == nil {
 					t.Fatal("NewAsyncLogger() should not return nil")
 				}
-				if cap(al.queue) != 100 {
-					t.Errorf("NewAsyncLogger() queue capacity = %v, want %v (default)", cap(al.queue), 100)
+				if al.rt == nil || al.rt.queue == nil {
+					t.Fatal("NewAsyncLogger() queue should not be nil")
+				}
+				if cap(al.rt.queue) != 100 {
+					t.Errorf("NewAsyncLogger() queue capacity = %v, want %v (default)", cap(al.rt.queue), 100)
 				}
 			},
 		},

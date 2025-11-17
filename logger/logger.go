@@ -18,12 +18,25 @@ type Logger struct {
 	config         *Config
 	fields         map[string]interface{}
 	outputs        []io.Writer
+	closers        []io.Closer
 	mu             sync.RWMutex
 	callerSkip     int
-	levelOrder     map[Level]int
 	jsonEncoder    *JSONEncoder
 	consoleEncoder *ConsoleEncoder
 	encoderMu      sync.RWMutex
+}
+
+const (
+	baseCallerSkip       = 3
+	asyncCallerSkipDelta = 1
+	globalCallerSkip     = 1
+)
+
+var defaultLevelOrder = map[Level]int{
+	LevelDebug: 0,
+	LevelInfo:  1,
+	LevelWarn:  2,
+	LevelError: 3,
 }
 
 // NewLogger creates a new logger instance with the provided configuration and output writers.
@@ -54,19 +67,20 @@ func NewLogger(config *Config, outputs []io.Writer, fields ...Field) *Logger {
 		fieldMap[field.Key] = field.Value
 	}
 
-	levelOrder := map[Level]int{
-		LevelDebug: 0,
-		LevelInfo:  1,
-		LevelWarn:  2,
-		LevelError: 3,
-	}
-
 	return &Logger{
-		config:     config,
-		fields:     fieldMap,
-		outputs:    outputs,
-		levelOrder: levelOrder,
+		config:  config,
+		fields:  fieldMap,
+		outputs: outputs,
 	}
+}
+
+func (l *Logger) setClosers(closers []io.Closer) {
+	if len(closers) == 0 || l == nil {
+		return
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.closers = append(l.closers, closers...)
 }
 
 // With creates a new logger instance with additional fields that will be included in all log messages.
@@ -99,8 +113,8 @@ func (l *Logger) With(fields ...Field) *Logger {
 		config:         l.config,
 		fields:         newFields,
 		outputs:        l.outputs,
+		closers:        l.closers,
 		callerSkip:     l.callerSkip,
-		levelOrder:     l.levelOrder,
 		jsonEncoder:    l.jsonEncoder,
 		consoleEncoder: l.consoleEncoder,
 	}
@@ -128,8 +142,8 @@ func (l *Logger) WithOptions(opts ...Option) *Logger {
 		config:         l.config,
 		fields:         make(map[string]interface{}),
 		outputs:        l.outputs,
+		closers:        l.closers,
 		callerSkip:     l.callerSkip,
-		levelOrder:     l.levelOrder,
 		jsonEncoder:    l.jsonEncoder,
 		consoleEncoder: l.consoleEncoder,
 	}
@@ -158,7 +172,7 @@ func (l *Logger) WithOptions(opts ...Option) *Logger {
 //	logger.Debug("Processing user", "user_id", 12345, "action", "create")
 func (l *Logger) Debug(args ...interface{}) {
 	msg, fields := l.formatArgs(args...)
-	l.log(LevelDebug, msg, fields...)
+	l.log(LevelDebug, 0, msg, fields...)
 }
 
 // Debugf logs a formatted message at debug level using Printf-style formatting.
@@ -175,7 +189,7 @@ func (l *Logger) Debug(args ...interface{}) {
 //	logger.Debugf("Processing user %s with id %d", "john", 12345)
 func (l *Logger) Debugf(template string, args ...interface{}) {
 	msg := fmt.Sprintf(template, args...)
-	l.log(LevelDebug, msg)
+	l.log(LevelDebug, 0, msg)
 }
 
 // Debugw logs a message with structured key-value pairs at debug level.
@@ -192,7 +206,7 @@ func (l *Logger) Debugf(template string, args ...interface{}) {
 //	logger.Debugw("Request received", "method", "GET", "path", "/api/users", "ip", "192.168.1.1")
 func (l *Logger) Debugw(msg string, keysAndValues ...interface{}) {
 	fields := l.parseKeysAndValues(keysAndValues...)
-	l.log(LevelDebug, msg, fields...)
+	l.log(LevelDebug, 0, msg, fields...)
 }
 
 // Info logs a message at info level.
@@ -209,7 +223,7 @@ func (l *Logger) Debugw(msg string, keysAndValues ...interface{}) {
 //	logger.Info("User created", "user_id", 12345, "email", "user@example.com")
 func (l *Logger) Info(args ...interface{}) {
 	msg, fields := l.formatArgs(args...)
-	l.log(LevelInfo, msg, fields...)
+	l.log(LevelInfo, 0, msg, fields...)
 }
 
 // Infof logs a formatted message at info level using Printf-style formatting.
@@ -226,7 +240,7 @@ func (l *Logger) Info(args ...interface{}) {
 //	logger.Infof("User %s logged in with id %d", "john", 12345)
 func (l *Logger) Infof(template string, args ...interface{}) {
 	msg := fmt.Sprintf(template, args...)
-	l.log(LevelInfo, msg)
+	l.log(LevelInfo, 0, msg)
 }
 
 // Infow logs a message with structured key-value pairs at info level.
@@ -243,7 +257,7 @@ func (l *Logger) Infof(template string, args ...interface{}) {
 //	logger.Infow("User created", "user_id", 12345, "email", "user@example.com")
 func (l *Logger) Infow(msg string, keysAndValues ...interface{}) {
 	fields := l.parseKeysAndValues(keysAndValues...)
-	l.log(LevelInfo, msg, fields...)
+	l.log(LevelInfo, 0, msg, fields...)
 }
 
 // Warn logs a message at warning level.
@@ -260,7 +274,7 @@ func (l *Logger) Infow(msg string, keysAndValues ...interface{}) {
 //	logger.Warn("Connection slow", "duration_ms", 1500, "host", "database.example.com")
 func (l *Logger) Warn(args ...interface{}) {
 	msg, fields := l.formatArgs(args...)
-	l.log(LevelWarn, msg, fields...)
+	l.log(LevelWarn, 0, msg, fields...)
 }
 
 // Warnf logs a formatted message at warning level using Printf-style formatting.
@@ -277,7 +291,7 @@ func (l *Logger) Warn(args ...interface{}) {
 //	logger.Warnf("Connection attempt %d of %d failed", attempt, maxAttempts)
 func (l *Logger) Warnf(template string, args ...interface{}) {
 	msg := fmt.Sprintf(template, args...)
-	l.log(LevelWarn, msg)
+	l.log(LevelWarn, 0, msg)
 }
 
 // Warnw logs a message with structured key-value pairs at warning level.
@@ -294,7 +308,7 @@ func (l *Logger) Warnf(template string, args ...interface{}) {
 //	logger.Warnw("Slow query detected", "query", "SELECT * FROM users", "duration_ms", 1500)
 func (l *Logger) Warnw(msg string, keysAndValues ...interface{}) {
 	fields := l.parseKeysAndValues(keysAndValues...)
-	l.log(LevelWarn, msg, fields...)
+	l.log(LevelWarn, 0, msg, fields...)
 }
 
 // Error logs a message at error level.
@@ -311,7 +325,7 @@ func (l *Logger) Warnw(msg string, keysAndValues ...interface{}) {
 //	logger.Error("Database error", "error", err.Error(), "operation", "fetch_user")
 func (l *Logger) Error(args ...interface{}) {
 	msg, fields := l.formatArgs(args...)
-	l.log(LevelError, msg, fields...)
+	l.log(LevelError, 0, msg, fields...)
 }
 
 // Errorf logs a formatted message at error level using Printf-style formatting.
@@ -328,7 +342,7 @@ func (l *Logger) Error(args ...interface{}) {
 //	logger.Errorf("Failed to connect to %s on port %d", "database", 5432)
 func (l *Logger) Errorf(template string, args ...interface{}) {
 	msg := fmt.Sprintf(template, args...)
-	l.log(LevelError, msg)
+	l.log(LevelError, 0, msg)
 }
 
 // Errorw logs a message with structured key-value pairs at error level.
@@ -345,7 +359,7 @@ func (l *Logger) Errorf(template string, args ...interface{}) {
 //	logger.Errorw("Database connection failed", "error", err.Error(), "host", "localhost", "port", 5432)
 func (l *Logger) Errorw(msg string, keysAndValues ...interface{}) {
 	fields := l.parseKeysAndValues(keysAndValues...)
-	l.log(LevelError, msg, fields...)
+	l.log(LevelError, 0, msg, fields...)
 }
 
 // Fatal logs a message at error level and then exits the program with os.Exit(1).
@@ -362,7 +376,7 @@ func (l *Logger) Errorw(msg string, keysAndValues ...interface{}) {
 //	logger.Fatal("Database connection failed", "error", err.Error())
 func (l *Logger) Fatal(args ...interface{}) {
 	msg, fields := l.formatArgs(args...)
-	l.log(LevelError, msg, fields...)
+	l.log(LevelError, 0, msg, fields...)
 	os.Exit(1)
 }
 
@@ -380,7 +394,7 @@ func (l *Logger) Fatal(args ...interface{}) {
 //	logger.Fatalf("Failed to start server on port %d: %v", 8080, err)
 func (l *Logger) Fatalf(template string, args ...interface{}) {
 	msg := fmt.Sprintf(template, args...)
-	l.log(LevelError, msg)
+	l.log(LevelError, 0, msg)
 	os.Exit(1)
 }
 
@@ -421,9 +435,17 @@ func (l *Logger) parseKeysAndValues(keysAndValues ...interface{}) []Field {
 	return fields
 }
 
-func (l *Logger) log(level Level, msg string, fields ...Field) {
-	if !l.shouldLog(level) {
+func (l *Logger) log(level Level, skipOffset int, msg string, fields ...Field) {
+	entry := l.createEntry(level, skipOffset, msg, fields)
+	if entry == nil {
 		return
+	}
+	l.writeEntry(entry)
+}
+
+func (l *Logger) createEntry(level Level, skipOffset int, msg string, fields []Field) *Entry {
+	if !l.shouldLog(level) {
+		return nil
 	}
 
 	l.mu.RLock()
@@ -449,30 +471,30 @@ func (l *Logger) log(level Level, msg string, fields ...Field) {
 	}
 
 	if !l.config.DisableCaller {
-		entry.Caller = l.getCaller()
+		entry.Caller = l.getCaller(skipOffset)
 	}
 
 	if !l.config.DisableStacktrace && level == LevelError {
 		entry.Stacktrace = l.getStacktrace()
 	}
 
-	l.writeEntry(entry)
+	return entry
 }
 
 func (l *Logger) shouldLog(level Level) bool {
-	levelVal, ok := l.levelOrder[level]
+	levelVal, ok := defaultLevelOrder[level]
 	if !ok {
 		return false
 	}
-	configLevelVal, ok := l.levelOrder[l.config.LogLevel]
+	configLevelVal, ok := defaultLevelOrder[l.config.LogLevel]
 	if !ok {
 		return true
 	}
 	return levelVal >= configLevelVal
 }
 
-func (l *Logger) getCaller() *CallerInfo {
-	skip := 3 + l.callerSkip
+func (l *Logger) getCaller(skipOffset int) *CallerInfo {
+	skip := baseCallerSkip + l.callerSkip + skipOffset
 	_, file, line, ok := runtime.Caller(skip)
 	if !ok {
 		return nil
@@ -525,9 +547,33 @@ func (l *Logger) writeEntry(entry *Entry) {
 
 	for _, w := range outputs {
 		fmt.Fprint(w, output)
-		if file, ok := w.(*os.File); ok && file != os.Stdout && file != os.Stderr {
+	}
+}
+
+func (l *Logger) flushOutputs() {
+	l.mu.RLock()
+	outputs := make([]io.Writer, len(l.outputs))
+	copy(outputs, l.outputs)
+	l.mu.RUnlock()
+
+	for _, w := range outputs {
+		if flusher, ok := w.(interface{ Flush() error }); ok {
+			_ = flusher.Flush()
+		}
+		if file, ok := w.(*os.File); ok {
 			_ = file.Sync()
 		}
+	}
+}
+
+func (l *Logger) closeOutputs() {
+	l.mu.Lock()
+	closers := l.closers
+	l.closers = nil
+	l.mu.Unlock()
+
+	for _, closer := range closers {
+		_ = closer.Close()
 	}
 }
 
