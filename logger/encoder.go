@@ -3,11 +3,14 @@
 package logger
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
+
+	jsoniter "github.com/json-iterator/go"
 )
+
+var json = jsoniter.ConfigFastest
 
 // Encoder encodes log entries to strings.
 type Encoder interface {
@@ -64,7 +67,7 @@ func (e *JSONEncoder) Encode(entry *Entry) string {
 
 	builder.WriteByte('{')
 
-	tsValue := entryTime.Format(time.RFC3339)
+	tsValue := entryTime.Format(time.RFC3339Nano)
 	tsJSON, _ := json.Marshal(tsValue)
 	builder.WriteString(`"` + LogEncoderTimeKey + `":`)
 	builder.Write(tsJSON)
