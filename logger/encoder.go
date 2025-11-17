@@ -20,27 +20,41 @@ type JSONEncoder struct {
 	timezone *time.Location
 }
 
-// NewJSONEncoder creates a new JSON encoder.
-func NewJSONEncoder(config *Config) *JSONEncoder {
+// newJSONEncoder creates a new JSON encoder with the provided configuration.
+func newJSONEncoder(config *Config) *JSONEncoder {
 	encoder := &JSONEncoder{config: config}
 	encoder.timezone = encoder.getTimezone()
 	return encoder
 }
 
-// getTimezone returns the timezone from config or UTC as default.
 func (e *JSONEncoder) getTimezone() *time.Location {
 	if e.config.Timezone == "" {
 		return time.UTC
 	}
 	loc, err := time.LoadLocation(e.config.Timezone)
 	if err != nil {
-		// If timezone is invalid, fall back to UTC
 		return time.UTC
 	}
 	return loc
 }
 
 // Encode encodes an entry as JSON with ts and caller as first keys.
+//
+// Input:
+//   - entry: The log entry to encode
+//
+// Output:
+//   - string: JSON-encoded log entry as a string
+//
+// Example:
+//
+//	entry := &Entry{
+//	    Time:    time.Now(),
+//	    Level:   LevelInfo,
+//	    Message: "User created",
+//	    Fields:  map[string]interface{}{"user_id": 12345},
+//	}
+//	json := encoder.Encode(entry)
 func (e *JSONEncoder) Encode(entry *Entry) string {
 	entryTime := entry.Time.In(e.timezone)
 
@@ -105,27 +119,41 @@ type ConsoleEncoder struct {
 	timezone *time.Location
 }
 
-// NewConsoleEncoder creates a new console encoder.
-func NewConsoleEncoder(config *Config) *ConsoleEncoder {
+// newConsoleEncoder creates a new console encoder with the provided configuration.
+func newConsoleEncoder(config *Config) *ConsoleEncoder {
 	encoder := &ConsoleEncoder{config: config}
 	encoder.timezone = encoder.getTimezone()
 	return encoder
 }
 
-// getTimezone returns the timezone from config or UTC as default.
 func (e *ConsoleEncoder) getTimezone() *time.Location {
 	if e.config.Timezone == "" {
 		return time.UTC
 	}
 	loc, err := time.LoadLocation(e.config.Timezone)
 	if err != nil {
-		// If timezone is invalid, fall back to UTC
 		return time.UTC
 	}
 	return loc
 }
 
-// Encode encodes an entry as console output.
+// Encode encodes an entry as human-readable console output.
+//
+// Input:
+//   - entry: The log entry to encode
+//
+// Output:
+//   - string: Console-formatted log entry as a string
+//
+// Example:
+//
+//	entry := &Entry{
+//	    Time:    time.Now(),
+//	    Level:   LevelInfo,
+//	    Message: "User created",
+//	    Fields:  map[string]interface{}{"user_id": 12345},
+//	}
+//	console := encoder.Encode(entry)
 func (e *ConsoleEncoder) Encode(entry *Entry) string {
 	entryTime := entry.Time.In(e.timezone)
 	timeStr := entryTime.Format(time.RFC3339Nano)
@@ -183,17 +211,16 @@ func (e *ConsoleEncoder) Encode(entry *Entry) string {
 	return builder.String()
 }
 
-// colorizeLevel adds ANSI color codes to log levels.
 func colorizeLevel(levelStr string, level Level) string {
 	switch level {
 	case LevelDebug:
-		return "\033[36m" + levelStr + "\033[0m" // Cyan
+		return "\033[36m" + levelStr + "\033[0m"
 	case LevelInfo:
-		return "\033[32m" + levelStr + "\033[0m" // Green
+		return "\033[32m" + levelStr + "\033[0m"
 	case LevelWarn:
-		return "\033[33m" + levelStr + "\033[0m" // Yellow
+		return "\033[33m" + levelStr + "\033[0m"
 	case LevelError:
-		return "\033[31m" + levelStr + "\033[0m" // Red
+		return "\033[31m" + levelStr + "\033[0m"
 	default:
 		return levelStr
 	}

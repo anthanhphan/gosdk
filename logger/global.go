@@ -117,7 +117,6 @@ func InitAsyncLogger(config *Config, defaultLogFields ...Field) func() {
 		}
 
 		baseLogger := buildLoggerConfig(config, defaultLogFields...)
-		// Use default queue size (100) - NewAsyncLogger handles 0 as default
 		asyncLoggerInstance = NewAsyncLogger(baseLogger, 0)
 		undo = func() {
 			if asyncLoggerInstance != nil {

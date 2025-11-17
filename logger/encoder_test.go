@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-func TestNewConsoleEncoder(t *testing.T) {
+func TestConsoleEncoder_Creation(t *testing.T) {
 	tests := []struct {
 		name   string
 		config *Config
@@ -22,10 +22,10 @@ func TestNewConsoleEncoder(t *testing.T) {
 			},
 			check: func(t *testing.T, encoder *ConsoleEncoder) {
 				if encoder == nil {
-					t.Fatal("NewConsoleEncoder() should not return nil")
+					t.Fatal("newConsoleEncoder() should not return nil")
 				}
 				if encoder.config == nil {
-					t.Error("NewConsoleEncoder() config should not be nil")
+					t.Error("newConsoleEncoder() config should not be nil")
 				}
 			},
 		},
@@ -33,13 +33,13 @@ func TestNewConsoleEncoder(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			encoder := NewConsoleEncoder(tt.config)
+			encoder := newConsoleEncoder(tt.config)
 			tt.check(t, encoder)
 		})
 	}
 }
 
-func TestConsoleEncoder_getTimezone(t *testing.T) {
+func TestConsoleEncoder_GetTimezone(t *testing.T) {
 	tests := []struct {
 		name   string
 		config *Config
@@ -85,14 +85,14 @@ func TestConsoleEncoder_getTimezone(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			encoder := NewConsoleEncoder(tt.config)
+			encoder := newConsoleEncoder(tt.config)
 			loc := encoder.getTimezone()
 			tt.check(t, loc)
 		})
 	}
 }
 
-func TestJSONEncoder_getTimezone(t *testing.T) {
+func TestJSONEncoder_GetTimezone(t *testing.T) {
 	tests := []struct {
 		name   string
 		config *Config
@@ -138,7 +138,7 @@ func TestJSONEncoder_getTimezone(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			encoder := NewJSONEncoder(tt.config)
+			encoder := newJSONEncoder(tt.config)
 			loc := encoder.getTimezone()
 			tt.check(t, loc)
 		})
@@ -277,7 +277,7 @@ func TestConsoleEncoder_Encode(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			encoder := NewConsoleEncoder(tt.config)
+			encoder := newConsoleEncoder(tt.config)
 			output := encoder.Encode(tt.entry)
 			tt.check(t, output)
 		})
@@ -351,7 +351,7 @@ func TestColorizeLevel(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			config := &Config{IsDevelopment: true}
-			encoder := NewConsoleEncoder(config)
+			encoder := newConsoleEncoder(config)
 			// We need to test colorizeLevel indirectly through Encode
 			entry := &Entry{
 				Time:    time.Now(),

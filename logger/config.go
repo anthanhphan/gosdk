@@ -74,16 +74,11 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-// buildLoggerConfig creates a logger instance from the config.
 func buildLoggerConfig(config *Config, defaultFields ...Field) *Logger {
-	// Get output writers
 	outputs := getOutputWriters(config.LogOutputPaths)
-
-	// Create logger
 	return NewLogger(config, outputs, defaultFields...)
 }
 
-// getOutputWriters returns a slice of io.Writer based on output paths.
 func getOutputWriters(paths []string) []io.Writer {
 	if len(paths) == 0 {
 		return []io.Writer{os.Stdout}
@@ -97,13 +92,8 @@ func getOutputWriters(paths []string) []io.Writer {
 		case "stderr":
 			writers = append(writers, os.Stderr)
 		default:
-			// Open file securely using utils.OpenFileSecurely to prevent directory traversal
-			// Use 0600 permissions (read/write for owner only) for security
 			file, err := utils.OpenFileSecurely(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
 			if err != nil {
-				// Fallback to stdout if file cannot be opened
-				// Note: This error is silently handled to avoid breaking logger initialization
-				// In production, you may want to log this error or handle it differently
 				writers = append(writers, os.Stdout)
 			} else {
 				writers = append(writers, file)
@@ -118,7 +108,6 @@ func getOutputWriters(paths []string) []io.Writer {
 	return writers
 }
 
-// getShortPathForCaller returns a short path for caller information.
 func getShortPathForCaller(fullPath string) string {
 	return utils.GetShortPath(fullPath)
 }
