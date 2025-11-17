@@ -203,3 +203,88 @@ func TestIsSystemFrame(t *testing.T) {
 		})
 	}
 }
+
+func TestGetPanicLocation_ErrorCases(t *testing.T) {
+	tests := []struct {
+		name    string
+		setup   func() (string, error)
+		wantErr bool
+		errMsg  string
+		check   func(t *testing.T, location string, err error)
+	}{
+		{
+			name: "call without recover context should return error or handle gracefully",
+			setup: func() (string, error) {
+				// Call directly without recover context
+				return GetPanicLocation()
+			},
+			wantErr: false, // May or may not return error depending on call stack
+			check: func(t *testing.T, location string, err error) {
+				// Function should handle gracefully - either return error or location
+				if err != nil {
+					// If error, should be one of the known error types
+					errorTypes := []string{
+						"not in panic context",
+						"empty stack",
+						"no user frame detected",
+					}
+					hasKnownError := false
+					for _, errType := range errorTypes {
+						if strings.Contains(err.Error(), errType) {
+							hasKnownError = true
+							break
+						}
+					}
+					if !hasKnownError {
+						t.Errorf("GetPanicLocation() error = %v, want known error type", err)
+					}
+				} else {
+					// If no error, should return valid location
+					if location == "" {
+						t.Error("GetPanicLocation() should return location or error")
+					}
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			location, err := tt.setup()
+			// Note: wantErr is false because behavior depends on call stack
+			// The check function validates the result appropriately
+			_ = tt.wantErr // Acknowledge wantErr for documentation
+			tt.check(t, location, err)
+		})
+	}
+}
+
+// TestGetPanicLocation_NoUserFrame tests the case where no user frame is detected
+func TestGetPanicLocation_NoUserFrame(t *testing.T) {
+	// This test is difficult to create directly, but we can test the error message
+	// by calling GetPanicLocation in a context where it might not find a user frame
+	location, err := GetPanicLocation()
+	if err == nil {
+		// If no error, that's also valid - depends on call stack
+		if location == "" {
+			t.Error("GetPanicLocation() should return location or error")
+		}
+	} else {
+		// Should be one of the known error types
+		errorTypes := []string{
+			"not in panic context",
+			"empty stack",
+			"no user frame detected",
+		}
+		hasKnownError := false
+		for _, errType := range errorTypes {
+			if strings.Contains(err.Error(), errType) {
+				hasKnownError = true
+				break
+			}
+		}
+		if !hasKnownError {
+			t.Errorf("GetPanicLocation() error = %v, want known error type", err)
+		}
+	}
+}

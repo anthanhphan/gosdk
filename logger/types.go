@@ -2,9 +2,27 @@
 
 package logger
 
-import (
-	"go.uber.org/zap/zapcore"
-)
+// Level represents the log level for filtering log messages.
+type Level string
+
+func (l Level) isValid() bool {
+	return l == LevelDebug || l == LevelInfo || l == LevelWarn || l == LevelError
+}
+
+func levelValues() []string {
+	return []string{string(LevelDebug), string(LevelInfo), string(LevelWarn), string(LevelError)}
+}
+
+// Encoding represents the output format for log messages.
+type Encoding string
+
+func (e Encoding) isValid() bool {
+	return e == EncodingJSON || e == EncodingConsole
+}
+
+func encodingValues() []string {
+	return []string{string(EncodingJSON), string(EncodingConsole)}
+}
 
 // Log level constants for filtering log messages.
 const (
@@ -17,13 +35,6 @@ const (
 	// LevelError represents error level logs (least verbose).
 	LevelError Level = "error"
 )
-
-var logLevelMap = map[Level]zapcore.Level{
-	LevelDebug: zapcore.DebugLevel,
-	LevelInfo:  zapcore.InfoLevel,
-	LevelWarn:  zapcore.WarnLevel,
-	LevelError: zapcore.ErrorLevel,
-}
 
 // Log encoding constants for output format.
 const (

@@ -10,7 +10,6 @@ import (
 
 	"github.com/anthanhphan/gosdk/logger"
 	"github.com/anthanhphan/gosdk/utils"
-	"go.uber.org/zap"
 	"gopkg.in/yaml.v2"
 )
 
@@ -46,7 +45,7 @@ const (
 //	}
 //	fmt.Printf("Database URL: %s\n", parsedConfig.DatabaseURL)
 func ParseConfig[T any](path string, model *T) (*T, error) {
-	log := logger.NewLoggerWithFields(zap.String("prefix", "conflux::ParseConfig"))
+	log := logger.NewLoggerWithFields(logger.String("prefix", "conflux::ParseConfig"))
 
 	if path == "" {
 		log.Error("config path is required")
@@ -63,7 +62,7 @@ func ParseConfig[T any](path string, model *T) (*T, error) {
 	// Read file safely to prevent directory traversal
 	data, err := utils.ReadFileSecurely(path)
 	if err != nil {
-		log.Errorf(err.Error())
+		log.Error(err.Error())
 		return nil, err
 	}
 

@@ -7,11 +7,10 @@ import (
 
 	"github.com/anthanhphan/gosdk/conflux"
 	"github.com/anthanhphan/gosdk/logger"
-	"go.uber.org/zap"
 )
 
 var log = logger.NewLoggerWithFields(
-	zap.String("prefix", "main"),
+	logger.String("prefix", "main"),
 )
 
 type Config struct {
@@ -28,7 +27,7 @@ func main() {
 		&Config{},
 	)
 	if err != nil {
-		log.Fatalf(err.Error())
+		log.Fatal(err.Error())
 	}
 
 	log.Infof("Config: %+v", config)

@@ -109,3 +109,185 @@ func TestReadFileSecurely(t *testing.T) {
 		t.Error("Expected nil result")
 	}
 }
+
+func TestOpenFileSecurely(t *testing.T) {
+	// Setup temp directory
+	tempDir, err := os.MkdirTemp("", "io_test")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	originalDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get current directory: %v", err)
+	}
+	defer func() {
+		if err := os.Chdir(originalDir); err != nil {
+			t.Fatalf("Failed to change back to original directory: %v", err)
+		}
+	}()
+
+	if err := os.Chdir(tempDir); err != nil {
+		t.Fatalf("Failed to change to temp directory: %v", err)
+	}
+
+	// Create test file
+	testFile := "test.log"
+	testContent := "test content"
+
+	tests := []struct {
+		name    string
+		path    string
+		flag    int
+		perm    os.FileMode
+		wantErr bool
+		check   func(t *testing.T, file *os.File, err error)
+	}{
+		{
+			name:    "valid file should open successfully",
+			path:    testFile,
+			flag:    os.O_CREATE | os.O_WRONLY | os.O_TRUNC,
+			perm:    0600,
+			wantErr: false,
+			check: func(t *testing.T, file *os.File, err error) {
+				if err != nil {
+					t.Errorf("OpenFileSecurely() unexpected error: %v", err)
+					return
+				}
+				if file == nil {
+					t.Error("OpenFileSecurely() should not return nil file")
+					return
+				}
+				file.Close()
+			},
+		},
+		{
+			name:    "file in subdirectory should open successfully",
+			path:    filepath.Join("subdir", "subfile.log"),
+			flag:    os.O_CREATE | os.O_WRONLY | os.O_TRUNC,
+			perm:    0600,
+			wantErr: false,
+			check: func(t *testing.T, file *os.File, err error) {
+				if err != nil {
+					t.Errorf("OpenFileSecurely() unexpected error: %v", err)
+					return
+				}
+				if file == nil {
+					t.Error("OpenFileSecurely() should not return nil file")
+					return
+				}
+				file.Close()
+			},
+		},
+		{
+			name:    "directory traversal with .. should return error",
+			path:    "../test.log",
+			flag:    os.O_CREATE | os.O_WRONLY | os.O_TRUNC,
+			perm:    0600,
+			wantErr: true,
+			check: func(t *testing.T, file *os.File, err error) {
+				if err == nil {
+					t.Error("OpenFileSecurely() expected error but got none")
+					return
+				}
+				if !strings.Contains(err.Error(), "directory traversal not allowed") {
+					t.Errorf("OpenFileSecurely() error = %v, want to contain 'directory traversal not allowed'", err)
+				}
+			},
+		},
+		{
+			name:    "absolute path should return error",
+			path:    "/etc/passwd",
+			flag:    os.O_CREATE | os.O_WRONLY | os.O_TRUNC,
+			perm:    0600,
+			wantErr: true,
+			check: func(t *testing.T, file *os.File, err error) {
+				if err == nil {
+					t.Error("OpenFileSecurely() expected error but got none")
+					return
+				}
+				if !strings.Contains(err.Error(), "directory traversal not allowed") {
+					t.Errorf("OpenFileSecurely() error = %v, want to contain 'directory traversal not allowed'", err)
+				}
+			},
+		},
+		{
+			name:    "path with .. in middle should work after cleaning",
+			path:    filepath.Join("subdir", "..", testFile),
+			flag:    os.O_CREATE | os.O_WRONLY | os.O_TRUNC,
+			perm:    0600,
+			wantErr: false,
+			check: func(t *testing.T, file *os.File, err error) {
+				if err != nil {
+					t.Errorf("OpenFileSecurely() unexpected error: %v", err)
+					return
+				}
+				if file == nil {
+					t.Error("OpenFileSecurely() should not return nil file")
+					return
+				}
+				file.Close()
+			},
+		},
+		{
+			name:    "append mode should append to existing file",
+			path:    testFile,
+			flag:    os.O_CREATE | os.O_WRONLY | os.O_APPEND,
+			perm:    0600,
+			wantErr: false,
+			check: func(t *testing.T, file *os.File, err error) {
+				if err != nil {
+					t.Errorf("OpenFileSecurely() unexpected error: %v", err)
+					return
+				}
+				if file == nil {
+					t.Error("OpenFileSecurely() should not return nil file")
+					return
+				}
+				// Write content
+				if _, err := file.WriteString(testContent); err != nil {
+					t.Errorf("Failed to write to file: %v", err)
+				}
+				file.Close()
+
+				// Verify content was written
+				data, err := os.ReadFile(testFile)
+				if err != nil {
+					t.Errorf("Failed to read file: %v", err)
+					return
+				}
+				if string(data) != testContent {
+					t.Errorf("File content = %v, want %v", string(data), testContent)
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create subdirectory if needed for subdirectory test
+			if strings.Contains(tt.path, "subdir") && !tt.wantErr {
+				if err := os.MkdirAll(filepath.Dir(tt.path), 0755); err != nil {
+					t.Fatalf("Failed to create subdirectory: %v", err)
+				}
+			}
+			file, err := OpenFileSecurely(tt.path, tt.flag, tt.perm)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("OpenFileSecurely() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			tt.check(t, file, err)
+		})
+	}
+
+	// Test with invalid root directory
+	os.RemoveAll(tempDir)
+	file, err := OpenFileSecurely("test.log", os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
+	if err == nil {
+		t.Error("OpenFileSecurely() expected error for invalid root directory")
+		if file != nil {
+			file.Close()
+		}
+	}
+}

@@ -4,7 +4,11 @@ package logger
 
 import (
 	"errors"
+	"io"
+	"os"
 	"strings"
+
+	"github.com/anthanhphan/gosdk/utils"
 )
 
 // Config represents the configuration for the logger.
@@ -27,6 +31,10 @@ type Config struct {
 
 	// LogOutputPaths specifies file paths to write log output to. If empty, logs to console.
 	LogOutputPaths []string `yaml:"log_output_paths" json:"log_output_paths"`
+
+	// Timezone specifies the timezone for timestamp formatting. If empty, uses UTC.
+	// Must be a valid IANA timezone name (e.g., "America/New_York", "Asia/Tokyo", "UTC").
+	Timezone string `yaml:"timezone" json:"timezone"`
 }
 
 // Validate checks if the configuration is valid and all required fields are set.
@@ -64,4 +72,53 @@ func (c *Config) Validate() error {
 	}
 
 	return nil
+}
+
+// buildLoggerConfig creates a logger instance from the config.
+func buildLoggerConfig(config *Config, defaultFields ...Field) *Logger {
+	// Get output writers
+	outputs := getOutputWriters(config.LogOutputPaths)
+
+	// Create logger
+	return NewLogger(config, outputs, defaultFields...)
+}
+
+// getOutputWriters returns a slice of io.Writer based on output paths.
+func getOutputWriters(paths []string) []io.Writer {
+	if len(paths) == 0 {
+		return []io.Writer{os.Stdout}
+	}
+
+	writers := make([]io.Writer, 0, len(paths))
+	for _, path := range paths {
+		switch path {
+		case "stdout", "":
+			writers = append(writers, os.Stdout)
+		case "stderr":
+			writers = append(writers, os.Stderr)
+		default:
+			// Open file securely using utils.OpenFileSecurely to prevent directory traversal
+			// Use 0600 permissions (read/write for owner only) for security
+			file, err := utils.OpenFileSecurely(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
+			if err != nil {
+				// Fallback to stdout if file cannot be opened
+				// Note: This error is silently handled to avoid breaking logger initialization
+				// In production, you may want to log this error or handle it differently
+				writers = append(writers, os.Stdout)
+			} else {
+				writers = append(writers, file)
+			}
+		}
+	}
+
+	if len(writers) == 0 {
+		return []io.Writer{os.Stdout}
+	}
+
+	return writers
+}
+
+// getShortPathForCaller returns a short path for caller information.
+func getShortPathForCaller(fullPath string) string {
+	return utils.GetShortPath(fullPath)
 }

@@ -6,7 +6,6 @@ import (
 	"errors"
 
 	"github.com/anthanhphan/gosdk/logger"
-	"go.uber.org/zap"
 )
 
 func main() {
@@ -49,19 +48,19 @@ func main() {
 
 	// Example 6: Component-specific logger with persistent fields
 	serviceLog := logger.NewLoggerWithFields(
-		zap.String("service", "user-service"),
-		zap.String("version", "1.0.0"),
+		logger.String("service", "user-service"),
+		logger.String("version", "1.0.0"),
 	)
 	serviceLog.Infow("Service initialized", "port", 8080)
 
 	// Example 7: Multiple component loggers
 	authLog := logger.NewLoggerWithFields(
-		zap.String("component", "auth"),
+		logger.String("component", "auth"),
 	)
 	authLog.Infow("User authenticated", "user_id", userID)
 
 	dbLog := logger.NewLoggerWithFields(
-		zap.String("component", "database"),
+		logger.String("component", "database"),
 	)
 	dbLog.Infow("Connection established", "pool_size", 10)
 

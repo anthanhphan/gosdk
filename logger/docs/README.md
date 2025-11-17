@@ -1,6 +1,19 @@
 # Logger Package
 
-A high-performance, structured logging package for Go applications built on [Uber's Zap](https://github.com/uber-go/zap). Provides fast, zero-allocation logging with JSON/Console output formats, configurable log levels, and easy structured data integration.
+A high-performance, self-built structured logging package for Go applications. Provides fast, zero-allocation logging with JSON/Console output formats, configurable log levels, timezone support, and easy structured data integration. Built from scratch without external dependencies (except standard library).
+
+## Features
+
+- **Self-built implementation** - No external dependencies, built from scratch
+- **Structured logging** - JSON and Console output formats
+- **Configurable log levels** - Debug, Info, Warn, Error, Fatal
+- **Asynchronous logging** - Non-blocking logging with background worker
+- **Timezone support** - Configurable timezone for timestamps
+- **Caller information** - Automatic file and line number tracking
+- **Stack traces** - Automatic stack trace capture for errors
+- **Default fields** - Persistent fields added to all log messages
+- **Component loggers** - Create loggers with persistent context
+- **Secure file handling** - Directory traversal protection
 
 ## Installation
 
@@ -15,7 +28,6 @@ package main
 
 import (
 	"github.com/anthanhphan/gosdk/logger"
-	"go.uber.org/zap"
 )
 
 func main() {
@@ -39,8 +51,8 @@ func main() {
 
 	// Create logger with persistent fields
 	serviceLog := logger.NewLoggerWithFields(
-		zap.String("service", "user-service"),
-		zap.String("version", "1.0.0"),
+		logger.String("service", "user-service"),
+		logger.String("version", "1.0.0"),
 	)
 	serviceLog.Infow("Service initialized", "port", 8080)
 }
@@ -58,6 +70,7 @@ type Config struct {
 	DisableCaller     bool      // Hide caller information
 	DisableStacktrace bool      // Hide stack traces
 	IsDevelopment     bool      // Development mode settings
+	Timezone          string    // Timezone for timestamps (IANA timezone name)
 }
 ```
 
@@ -66,25 +79,33 @@ type Config struct {
 - **`LevelDebug`** - Debug messages (most verbose)
 - **`LevelInfo`** - Informational messages
 - **`LevelWarn`** - Warning messages
-- **`LevelError`** - Error messages (least verbose)
+- **`LevelError`** - Error messages
+- **`LevelFatal`** - Fatal messages (logs and exits with code 1)
 
 ### Output Formats
 
-- **`EncodingJSON`** - Structured JSON output
-- **`EncodingConsole`** - Human-readable console output
+- **`EncodingJSON`** - Structured JSON output with ordered keys (ts and caller first)
+- **`EncodingConsole`** - Human-readable console output with color support in development mode
 
 ### Output Destinations
 
-- **Empty array `[]string{}`** - Log to console
-- **File paths `[]string{"/var/log/app.log"}`** - Log to files
-- **Multiple paths** - Log to multiple destinations
+- **Empty array `[]string{}`** - Log to console (stdout)
+- **`"stdout"`** - Explicitly log to stdout
+- **`"stderr"`** - Log to stderr
+- **File paths `[]string{"log/app.log"}`** - Log to files (directory is created automatically)
+- **Multiple paths** - Log to multiple destinations simultaneously
+
+### Timezone Configuration
+
+The `Timezone` field accepts IANA timezone names (e.g., "Asia/Ho_Chi_Minh", "America/New_York", "UTC"). If empty or invalid, defaults to UTC.
 
 ### Development Settings
 
 When `IsDevelopment: true`:
 
+- Console output includes ANSI color codes for log levels
 - More readable output format
-- Includes caller information
+- Includes caller information by default
 - Optimized for development debugging
 
 ## Usage Examples
@@ -111,6 +132,28 @@ logger.Info("Service started")
 logger.Infow("Service initialized", "port", 8080, "version", "1.0.0")
 ```
 
+### Asynchronous Logging
+
+For high-performance applications, use asynchronous logging to avoid blocking:
+
+```go
+// Initialize async logger (non-blocking, uses background worker)
+undo := logger.InitAsyncLogger(&logger.Config{
+	LogLevel:    logger.LevelInfo,
+	LogEncoding: logger.EncodingJSON,
+	Timezone:    "Asia/Ho_Chi_Minh",
+	LogOutputPaths: []string{"log/app.log"},
+})
+defer undo() // Automatically flushes remaining entries
+
+// All logging operations are non-blocking
+logger.Info("Application started")
+logger.Infow("User created", "user_id", 12345)
+
+// Manually flush if needed before shutdown
+logger.Flush()
+```
+
 ### Convenience Logging Functions
 
 The package provides global logging functions for quick and easy logging without creating logger instances:
@@ -123,16 +166,18 @@ logger.Debug("Debug message")
 logger.Info("Information message")
 logger.Warn("Warning message")
 logger.Error("Error message")
+logger.Fatal("Fatal error") // Logs and exits with code 1
 ```
 
 #### Formatted Logging (Printf-style)
 
 ```go
-// Formatted messages with type-safe formatting
+// Formatted messages
 logger.Debugf("User %s logged in at %s", username, time.Now())
 logger.Infof("Processing %d items", count)
 logger.Warnf("Connection attempt %d of %d failed", attempt, maxAttempts)
 logger.Errorf("Failed to connect to %s: %v", host, err)
+logger.Fatalf("Fatal error: %s", err.Error()) // Logs and exits with code 1
 ```
 
 #### Structured Logging (Key-Value pairs)
@@ -170,10 +215,11 @@ logger.Errorw("Database connection failed",
 config := &logger.Config{
 	LogLevel:          logger.LevelInfo,
 	LogEncoding:       logger.EncodingJSON,
-	LogOutputPaths:    []string{"/var/log/app.log"},
+	LogOutputPaths:    []string{"log/app.log"},
 	DisableCaller:     false,
 	DisableStacktrace: true,
 	IsDevelopment:     false,
+	Timezone:          "Asia/Ho_Chi_Minh",
 }
 undo := logger.InitLogger(config)
 defer undo()
@@ -191,9 +237,9 @@ undo := logger.InitLogger(&logger.Config{
 	LogLevel:    logger.LevelInfo,
 	LogEncoding: logger.EncodingJSON,
 },
-	zap.String("app_name", "my-app"),
-	zap.String("app_version", "1.0.0"),
-	zap.String("environment", "production"),
+	logger.String("app_name", "my-app"),
+	logger.String("app_version", "1.0.0"),
+	logger.String("environment", "production"),
 )
 defer undo()
 
@@ -212,15 +258,15 @@ defer undo()
 
 // Authentication component logger
 authLog := logger.NewLoggerWithFields(
-	zap.String("component", "auth"),
-	zap.String("version", "2.1.0"),
+	logger.String("component", "auth"),
+	logger.String("version", "2.1.0"),
 )
 authLog.Infow("User logged in", "user_id", "12345")
 
 // Database component logger
 dbLog := logger.NewLoggerWithFields(
-	zap.String("component", "database"),
-	zap.String("host", "localhost"),
+	logger.String("component", "database"),
+	logger.String("host", "localhost"),
 )
 dbLog.Infow("Connection established", "pool_size", 10)
 
@@ -242,8 +288,8 @@ if err != nil {
 
 // Using component-specific logger
 log := logger.NewLoggerWithFields(
-	zap.String("request_id", "req-123"),
-	zap.String("user_id", "user-456"),
+	logger.String("request_id", "req-123"),
+	logger.String("user_id", "user-456"),
 )
 
 if err != nil {
@@ -254,17 +300,34 @@ if err != nil {
 }
 ```
 
+### Fatal Logging
+
+Fatal methods log at error level and then exit the program with `os.Exit(1)`:
+
+```go
+// Fatal logging - logs and exits
+if criticalError {
+	logger.Fatal("Critical error occurred")
+}
+
+// Fatal formatted logging
+if err != nil {
+	logger.Fatalf("Failed to start server: %v", err)
+}
+```
+
 ## API Reference
 
 ### Initialization Functions
 
-- **`InitLogger(config *Config, defaultLogFields ...zap.Field) func()`** - Initialize logger with custom configuration and optional default fields
+- **`InitLogger(config *Config, defaultLogFields ...Field) func()`** - Initialize synchronous logger with custom configuration and optional default fields
 - **`InitDefaultLogger() func()`** - Initialize with default configuration (debug level, development mode)
 - **`InitProductionLogger() func()`** - Initialize with production configuration (info level, optimized settings)
+- **`InitAsyncLogger(config *Config, defaultLogFields ...Field) func()`** - Initialize asynchronous logger with custom configuration (non-blocking, uses background worker)
 
 ### Convenience Logging Functions
 
-All convenience functions auto-initialize the logger with default configuration if not already initialized.
+All convenience functions auto-initialize the logger with default configuration if not already initialized. If async logger is initialized, these functions use async logging automatically.
 
 #### Simple Logging
 
@@ -272,6 +335,7 @@ All convenience functions auto-initialize the logger with default configuration 
 - **`Info(args ...interface{})`** - Log info message
 - **`Warn(args ...interface{})`** - Log warning message
 - **`Error(args ...interface{})`** - Log error message
+- **`Fatal(args ...interface{})`** - Log error message and exit with code 1
 
 #### Formatted Logging (Printf-style)
 
@@ -279,6 +343,7 @@ All convenience functions auto-initialize the logger with default configuration 
 - **`Infof(template string, args ...interface{})`** - Log formatted info message
 - **`Warnf(template string, args ...interface{})`** - Log formatted warning message
 - **`Errorf(template string, args ...interface{})`** - Log formatted error message
+- **`Fatalf(template string, args ...interface{})`** - Log formatted error message and exit with code 1
 
 #### Structured Logging (Key-Value pairs)
 
@@ -287,19 +352,32 @@ All convenience functions auto-initialize the logger with default configuration 
 - **`Warnw(msg string, keysAndValues ...interface{})`** - Log warning with structured fields
 - **`Errorw(msg string, keysAndValues ...interface{})`** - Log error with structured fields
 
-### Component Logger
+### Utility Functions
 
-- **`NewLoggerWithFields(fields ...zap.Field) *zap.SugaredLogger`** - Create a sugared logger with persistent fields
+- **`Flush()`** - Flush all queued log entries (for async logger)
+- **`NewLoggerWithFields(fields ...Field) *Logger`** - Create a logger with persistent fields
+
+### Field Constructors
+
+- **`String(key, value string) Field`** - Create a string field
+- **`Int(key string, value int) Field`** - Create an integer field
+- **`Int64(key string, value int64) Field`** - Create an int64 field
+- **`Float64(key string, value float64) Field`** - Create a float64 field
+- **`Bool(key string, value bool) Field`** - Create a boolean field
+- **`ErrorField(err error) Field`** - Create an error field
+- **`Any(key string, value interface{}) Field`** - Create a field with any value type
 
 ## Output Formats
 
 ### JSON Output
 
+JSON output has ordered keys with `ts` and `caller` as the first keys:
+
 ```json
 {
+  "ts": "2025-11-17T13:57:39+07:00",
+  "caller": "logger/docs/example/main.go:25",
   "level": "info",
-  "ts": "2025-11-01T14:24:43.047+0700",
-  "caller": "logger/zap.go:145",
   "msg": "User created",
   "user_id": 12345,
   "email": "user@example.com"
@@ -308,9 +386,18 @@ All convenience functions auto-initialize the logger with default configuration 
 
 ### Console Output
 
+Console output is human-readable with optional color support:
+
 ```
-2025-11-01T14:24:43.047+0700	INFO	zap.go:145	User created	{"user_id": 12345, "email": "user@example.com"}
+2025-11-17T13:57:39+07:00	INFO	logger/docs/example/main.go:25	User created	{"user_id": 12345, "email": "user@example.com"}
 ```
+
+In development mode, log levels are colorized:
+
+- Debug: Cyan
+- Info: Green
+- Warn: Yellow
+- Error: Red
 
 ## Best Practices
 
@@ -332,6 +419,7 @@ logger.Infof("User created with id %d and email %s", 12345, "user@example.com")
 - **Info**: General informational messages about application progress
 - **Warn**: Warning messages for potentially harmful situations
 - **Error**: Error messages for error events
+- **Fatal**: Critical errors that require immediate program termination
 
 ### 3. Initialize Once
 
@@ -351,15 +439,62 @@ func main() {
 Create loggers with persistent fields for different components:
 
 ```go
-authLog := logger.NewLoggerWithFields(zap.String("component", "auth"))
-dbLog := logger.NewLoggerWithFields(zap.String("component", "database"))
+authLog := logger.NewLoggerWithFields(logger.String("component", "auth"))
+dbLog := logger.NewLoggerWithFields(logger.String("component", "database"))
 ```
 
-### 5. Auto-Initialization
+### 5. Use Async Logger for High-Throughput Applications
 
-Convenience functions auto-initialize with default configuration if logger is not initialized:
+For applications with high logging volume, use async logger to avoid blocking:
 
 ```go
-// No need to explicitly initialize for simple use cases
-logger.Info("Application started") // Auto-initializes if needed
+undo := logger.InitAsyncLogger(&logger.Config{
+	LogLevel:    logger.LevelInfo,
+	LogEncoding: logger.EncodingJSON,
+	LogOutputPaths: []string{"log/app.log"},
+})
+defer undo()
 ```
+
+### 6. Configure Timezone for Timestamps
+
+Set timezone for more readable timestamps in your local timezone:
+
+```go
+config := &logger.Config{
+	LogLevel:    logger.LevelInfo,
+	LogEncoding: logger.EncodingJSON,
+	Timezone:    "Asia/Ho_Chi_Minh", // IANA timezone name
+}
+```
+
+### 7. File Output Best Practices
+
+- Use relative paths like `"log/app.log"` (directory is created automatically)
+- The `log/` folder should be added to `.gitignore`
+- Multiple output paths are supported for redundancy
+
+## Security
+
+The logger package includes built-in security features:
+
+- **Directory traversal protection** - File paths are validated to prevent directory traversal attacks
+- **Secure file permissions** - Log files are created with `0600` permissions (read/write for owner only)
+- **Path validation** - All file paths are validated and resolved to absolute paths within the working directory
+
+## Performance
+
+- **Zero-allocation logging** - Optimized for minimal memory allocations
+- **Asynchronous logging** - Non-blocking logging with configurable queue size (default: 100)
+- **Efficient encoding** - Fast JSON and Console encoding
+- **Concurrent-safe** - All operations are safe for concurrent use
+
+## Migration from Zap
+
+If you're migrating from zap, note these differences:
+
+- Use `logger.String()` instead of `zap.String()`
+- Use `logger.Field` instead of `zap.Field`
+- No `SugaredLogger` - all methods are directly on `Logger`
+- Use `InitAsyncLogger()` for async logging instead of zap's async options
+- Field constructors are in the `logger` package, not `zap`

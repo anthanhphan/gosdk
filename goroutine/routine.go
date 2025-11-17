@@ -11,7 +11,6 @@ import (
 
 	"github.com/anthanhphan/gosdk/logger"
 	"github.com/anthanhphan/gosdk/utils"
-	"go.uber.org/zap"
 )
 
 const (
@@ -235,14 +234,14 @@ func getCallerLocation() string {
 
 // functionInvoker handles function invocation with argument validation and type conversion.
 type functionInvoker struct {
-	logger *zap.SugaredLogger
+	logger *logger.Logger
 }
 
 // newFunctionInvoker creates a new function invoker.
 func newFunctionInvoker() *functionInvoker {
 	return &functionInvoker{
 		logger: logger.NewLoggerWithFields(
-			zap.String("prefix", "routine::invoke"),
+			logger.String("prefix", "routine::invoke"),
 		),
 	}
 }
@@ -360,7 +359,7 @@ func capturePanicLocation() string {
 // panicRecoverer handles panic recovery and logging.
 type panicRecoverer struct {
 	callerLocation string
-	logger         *zap.SugaredLogger
+	logger         *logger.Logger
 }
 
 // recoverPanic handles panic recovery with optional caller location.
@@ -380,7 +379,7 @@ func recoverPanic(callerLocation string) {
 	recoverer := &panicRecoverer{
 		callerLocation: callerLocation,
 		logger: logger.NewLoggerWithFields(
-			zap.String("prefix", "routine::recoverPanic"),
+			logger.String("prefix", "routine::recoverPanic"),
 		),
 	}
 
