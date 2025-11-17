@@ -22,10 +22,6 @@ const (
 	EnvProduction = utils.EnvProduction
 )
 
-var log = logger.NewLoggerWithFields(
-	zap.String("prefix", "conflux"),
-)
-
 // ParseConfig parses a configuration file and unmarshals it into the provided model.
 //
 // Input:
@@ -50,6 +46,8 @@ var log = logger.NewLoggerWithFields(
 //	}
 //	fmt.Printf("Database URL: %s\n", parsedConfig.DatabaseURL)
 func ParseConfig[T any](path string, model *T) (*T, error) {
+	log := logger.NewLoggerWithFields(zap.String("prefix", "conflux::ParseConfig"))
+
 	if path == "" {
 		log.Error("config path is required")
 		return nil, fmt.Errorf("config path is required")
@@ -58,7 +56,7 @@ func ParseConfig[T any](path string, model *T) (*T, error) {
 	// Validate file extension
 	ext := strings.TrimPrefix(filepath.Ext(path), ".")
 	if !isValidExtension(ext) {
-		log.Error("unsupported file extension %s", ext)
+		log.Errorf("unsupported file extension %s", ext)
 		return nil, fmt.Errorf("unsupported file extension: %s", ext)
 	}
 
@@ -71,7 +69,7 @@ func ParseConfig[T any](path string, model *T) (*T, error) {
 
 	// Parse based on file extension
 	if err := unmarshalConfig(data, ext, model); err != nil {
-		log.Error("failed to unmarshal %s: %v", ext, err)
+		log.Errorf("failed to unmarshal %s: %v", ext, err)
 		return nil, fmt.Errorf("failed to unmarshal %s: %w", ext, err)
 	}
 
