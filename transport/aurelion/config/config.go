@@ -1,10 +1,12 @@
-package aurelion
+package config
 
 import (
 	"errors"
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/anthanhphan/gosdk/transport/aurelion/core"
 )
 
 const (
@@ -16,7 +18,7 @@ const (
 	DefaultMaxConcurrentConnections = 262144
 	DefaultShutdownTimeout          = 30 * time.Second
 
-	configContextKey = "aurelion_config"
+	ContextKey = "aurelion_config"
 )
 
 // Config represents the HTTP server configuration.
@@ -37,7 +39,7 @@ type Config struct {
 	UseProperHTTPStatus      bool           `json:"use_proper_http_status,omitempty" yaml:"use_proper_http_status,omitempty"`
 }
 
-// DefaultConfig creates a new Config instance with sensible default values.
+// Default creates a new Config instance with sensible default values.
 //
 // Input:
 //   - None
@@ -47,10 +49,10 @@ type Config struct {
 //
 // Example:
 //
-//	cfg := aurelion.DefaultConfig()
+//	cfg := config.Default()
 //	cfg.Port = 3000
 //	server, _ := aurelion.NewHttpServer(cfg)
-func DefaultConfig() *Config {
+func Default() *Config {
 	return &Config{
 		ServiceName:              "HTTP Server",
 		Port:                     DefaultPort,
@@ -69,10 +71,10 @@ func DefaultConfig() *Config {
 //
 // Example:
 //
-//	cfg := &aurelion.Config{ServiceName: "My API"}
+//	cfg := &config.Config{ServiceName: "My API"}
 //	cfg = cfg.Merge() // Port, MaxBodySize, etc. will be set to defaults
 func (c *Config) Merge() *Config {
-	defaults := DefaultConfig()
+	defaults := Default()
 
 	if c.ServiceName == "" {
 		c.ServiceName = defaults.ServiceName
@@ -103,13 +105,13 @@ func (c *Config) Merge() *Config {
 //
 // Example:
 //
-//	cfg := &aurelion.Config{ServiceName: "My API", Port: 8080}
+//	cfg := &config.Config{ServiceName: "My API", Port: 8080}
 //	if err := cfg.Validate(); err != nil {
 //	    log.Fatal(err)
 //	}
 func (c *Config) Validate() error {
 	if c == nil {
-		return ErrConfigNil
+		return core.ErrConfigNil
 	}
 
 	if err := c.validateBasicFields(); err != nil {
@@ -235,7 +237,7 @@ type CSRFConfig struct {
 //
 // Example:
 //
-//	csrfCfg := &aurelion.CSRFConfig{KeyLookup: "header:X-Csrf-Token"}
+//	csrfCfg := &config.CSRFConfig{KeyLookup: "header:X-Csrf-Token"}
 //	if err := csrfCfg.Validate(); err != nil {
 //	    log.Fatal(err)
 //	}
@@ -298,7 +300,7 @@ type CORSConfig struct {
 //
 // Example:
 //
-//	corsCfg := &aurelion.CORSConfig{
+//	corsCfg := &config.CORSConfig{
 //	    AllowOrigins: []string{"https://example.com"},
 //	    AllowMethods: []string{"GET", "POST"},
 //	}
@@ -338,7 +340,7 @@ func (c *CORSConfig) Validate() error {
 	return nil
 }
 
-// StoreConfigInContext stores the server config in the request context for handler access.
+// StoreInContext stores the server config in the request context for handler access.
 //
 // Input:
 //   - ctx: The request context
@@ -349,15 +351,15 @@ func (c *CORSConfig) Validate() error {
 //
 // Example:
 //
-//	aurelion.StoreConfigInContext(ctx, serverConfig)
-func StoreConfigInContext(ctx Context, cfg *Config) {
+//	config.StoreInContext(ctx, serverConfig)
+func StoreInContext(ctx core.Context, cfg *Config) {
 	if ctx == nil || cfg == nil {
 		return
 	}
-	ctx.Locals(configContextKey, cfg)
+	ctx.Locals(ContextKey, cfg)
 }
 
-// ConfigFromContext retrieves the server configuration stored in the request context.
+// FromContext retrieves the server configuration stored in the request context.
 //
 // Input:
 //   - ctx: The request context
@@ -367,15 +369,15 @@ func StoreConfigInContext(ctx Context, cfg *Config) {
 //
 // Example:
 //
-//	cfg := aurelion.ConfigFromContext(ctx)
+//	cfg := config.FromContext(ctx)
 //	if cfg != nil && cfg.UseProperHTTPStatus {
 //	    // Use proper HTTP status codes
 //	}
-func ConfigFromContext(ctx Context) *Config {
+func FromContext(ctx core.Context) *Config {
 	if ctx == nil {
 		return nil
 	}
-	if value := ctx.Locals(configContextKey); value != nil {
+	if value := ctx.Locals(ContextKey); value != nil {
 		if cfg, ok := value.(*Config); ok {
 			return cfg
 		}

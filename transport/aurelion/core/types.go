@@ -1,4 +1,4 @@
-package aurelion
+package core
 
 import (
 	"context"
@@ -11,7 +11,7 @@ import (
 //
 // Example:
 //
-//	ctx.JSON(aurelion.Map{
+//	ctx.JSON(core.Map{
 //	    "success": true,
 //	    "data": myData,
 //	    "count": 42,
@@ -33,7 +33,7 @@ type Map map[string]interface{}
 //
 // Example:
 //
-//	func getUserHandler(ctx aurelion.Context) error {
+//	func getUserHandler(ctx core.Context) error {
 //	    userID := ctx.Params("id")
 //	    user, err := fetchUser(userID)
 //	    if err != nil {
@@ -59,7 +59,7 @@ type Handler func(Context) error
 //
 // Example:
 //
-//	func authMiddleware(ctx aurelion.Context) error {
+//	func authMiddleware(ctx core.Context) error {
 //	    token := ctx.Get("Authorization")
 //	    if token == "" {
 //	        return errors.New("authentication required")
@@ -92,12 +92,12 @@ const (
 //   - Type-safe access to request data
 //   - Fluent response building
 //
-// The interface is implemented by internal/context.FiberContext which wraps
+// The interface is implemented by internal/runtimectx.FiberContext which wraps
 // Fiber's context while tracking state for proper context.Context integration.
 //
 // Example:
 //
-//	func handler(ctx aurelion.Context) error {
+//	func handler(ctx core.Context) error {
 //	    // Read request
 //	    userID := ctx.Params("id")
 //	    var req UpdateRequest
@@ -109,7 +109,7 @@ const (
 //	    ctx.Locals("action", "update_user")
 //
 //	    // Send response
-//	    return ctx.Status(200).JSON(aurelion.Map{
+//	    return ctx.Status(200).JSON(core.Map{
 //	        "success": true,
 //	    })
 //	}
@@ -189,7 +189,7 @@ type Context interface {
 //
 // Example:
 //
-//	cookie := &aurelion.Cookie{
+//	cookie := &core.Cookie{
 //	    Name:     "session_token",
 //	    Value:    "abc123",
 //	    Path:     "/",

@@ -1,7 +1,7 @@
-package aurelion
+package server
 
 import (
-	stdctx "context"
+	"context"
 	"fmt"
 	"os"
 	"os/signal"
@@ -9,7 +9,10 @@ import (
 	"time"
 
 	"github.com/anthanhphan/gosdk/logger"
+	"github.com/anthanhphan/gosdk/transport/aurelion/config"
+	"github.com/anthanhphan/gosdk/transport/aurelion/core"
 	"github.com/anthanhphan/gosdk/transport/aurelion/middleware"
+	"github.com/anthanhphan/gosdk/transport/aurelion/response"
 	"github.com/anthanhphan/gosdk/transport/aurelion/router"
 	"github.com/anthanhphan/gosdk/utils"
 	"github.com/gofiber/fiber/v2"
@@ -31,10 +34,10 @@ const (
 // HttpServer represents an HTTP server instance.
 type HttpServer struct {
 	app               *fiber.App
-	config            *Config
+	config            *config.Config
 	globalMiddlewares []fiber.Handler
 	panicRecover      fiber.Handler
-	authMiddleware    Middleware
+	authMiddleware    core.Middleware
 	authzChecker      AuthorizationFunc
 	rateLimiter       fiber.Handler
 	routes            []*router.Route
@@ -43,31 +46,9 @@ type HttpServer struct {
 }
 
 // NewHttpServer creates a new HTTP server with the given configuration and options.
-//
-// Input:
-//   - cfg: Server configuration (required)
-//   - options: Optional server configuration functions
-//
-// Output:
-//   - *HttpServer: The configured server instance
-//   - error: Any error that occurred during server creation
-//
-// Example:
-//
-//	cfg := &aurelion.Config{
-//	    ServiceName: "My API",
-//	    Port:        8080,
-//	}
-//	server, err := aurelion.NewHttpServer(cfg,
-//	    aurelion.WithAuthentication(authMiddleware),
-//	    aurelion.WithAuthorization(authzChecker),
-//	)
-//	if err != nil {
-//	    log.Fatal(err)
-//	}
-func NewHttpServer(cfg *Config, options ...ServerOption) (*HttpServer, error) {
+func NewHttpServer(cfg *config.Config, options ...ServerOption) (*HttpServer, error) {
 	if cfg == nil {
-		return nil, ErrConfigNil
+		return nil, core.ErrConfigNil
 	}
 
 	cfg = cfg.Merge()
@@ -102,7 +83,7 @@ func NewHttpServer(cfg *Config, options ...ServerOption) (*HttpServer, error) {
 		globalMiddlewares: make([]fiber.Handler, 0),
 		routes:            make([]*router.Route, 0),
 		groupRoutes:       make([]*router.GroupRoute, 0),
-		logger:            logger.NewLoggerWithFields(zap.String("package", "aurelion")),
+		logger:            logger.NewLoggerWithFields(zap.String("package", "aurelion/server")),
 	}
 
 	for _, option := range options {
@@ -115,21 +96,15 @@ func NewHttpServer(cfg *Config, options ...ServerOption) (*HttpServer, error) {
 
 	server.AddRoutes(router.NewRoute(DefaultHealthCheckPath).
 		GET().
-		Handler(func(ctx router.ContextInterface) error {
-			// Extract underlying aurelion.Context from routerContextAdapter
-			if adapter, ok := ctx.(*routerContextAdapter); ok {
-				StoreConfigInContext(adapter.ctx, cfg)
-				return HealthCheckPublic(adapter.ctx)
-			}
-			// If it's not an adapter (shouldn't happen), return error
-			return HealthCheckPublic(nil)
+		Handler(func(ctx core.Context) error {
+			config.StoreInContext(ctx, cfg)
+			return response.HealthCheck(ctx)
 		}),
 	)
 
 	return server, nil
 }
 
-// setupGlobalMiddlewares configures global middleware that applies to all routes.
 func (s *HttpServer) setupGlobalMiddlewares() {
 	s.app.Use(helmet.New())
 
@@ -150,7 +125,7 @@ func (s *HttpServer) setupGlobalMiddlewares() {
 		s.app.Use(recover.New())
 	}
 
-	s.app.Use(ConfigInjectorPublic(s.config))
+	s.app.Use(middleware.ConfigInjector(s.config))
 	s.app.Use(middleware.RequestIDMiddleware())
 	s.app.Use(middleware.TraceIDMiddleware())
 	s.app.Use(middleware.RequestResponseLogger(s.logger, s.config.VerboseLogging))
@@ -160,28 +135,15 @@ func (s *HttpServer) setupGlobalMiddlewares() {
 	}
 
 	if s.config.EnableCORS {
-		s.app.Use(cors.New(BuildCORSConfigPublic(s.config.CORS)))
+		s.app.Use(cors.New(middleware.BuildCORSConfig(s.config.CORS)))
 	}
 
 	if s.config.EnableCSRF {
-		s.app.Use(csrf.New(BuildCSRFConfigPublic(s.config.CSRF)))
+		s.app.Use(csrf.New(middleware.BuildCSRFConfig(s.config.CSRF)))
 	}
 }
 
 // AddRoutes adds multiple routes to the server.
-//
-// Input:
-//   - routes: Variadic routes (Route, RouteBuilder, or GroupRouteBuilder)
-//
-// Output:
-//   - *HttpServer: Returns self for method chaining
-//
-// Example:
-//
-//	server.AddRoutes(
-//	    router.NewRoute("/users").GET().Handler(getUsers),
-//	    router.NewRoute("/users").POST().Handler(createUser),
-//	)
 func (s *HttpServer) AddRoutes(routes ...interface{}) *HttpServer {
 	for _, entry := range routes {
 		route := router.ToRoute(entry)
@@ -190,12 +152,7 @@ func (s *HttpServer) AddRoutes(routes ...interface{}) *HttpServer {
 			continue
 		}
 
-		// Only clone if we need to modify the route (e.g., apply protection)
-		routeCopy := route
-		if route.IsProtected || len(route.RequiredPermissions) > 0 {
-			routeCopy = route.Clone()
-		}
-
+		routeCopy := route.Clone()
 		if err := router.ValidateRoute(routeCopy); err != nil {
 			s.logger.Errorw("invalid route", "error", err, "path", routeCopy.Path)
 			continue
@@ -210,19 +167,6 @@ func (s *HttpServer) AddRoutes(routes ...interface{}) *HttpServer {
 }
 
 // AddGroupRoutes adds multiple group routes to the server.
-//
-// Input:
-//   - groups: Variadic group routes (GroupRoute or GroupRouteBuilder)
-//
-// Output:
-//   - *HttpServer: Returns self for method chaining
-//
-// Example:
-//
-//	server.AddGroupRoutes(
-//	    router.NewGroupRoute("/api/v1").Routes(...),
-//	    router.NewGroupRoute("/api/v2").Routes(...),
-//	)
 func (s *HttpServer) AddGroupRoutes(groups ...interface{}) *HttpServer {
 	for _, entry := range groups {
 		group := router.ToGroupRoute(entry)
@@ -238,7 +182,7 @@ func (s *HttpServer) AddGroupRoutes(groups ...interface{}) *HttpServer {
 		}
 
 		s.applyGroupProtection(&groupCopy)
-		s.registerGroupRoute(&groupCopy)
+		groupCopy.Register(s.app)
 		groupClone := groupCopy
 		s.groupRoutes = append(s.groupRoutes, &groupClone)
 	}
@@ -260,60 +204,41 @@ func (s *HttpServer) applyProtection(route *router.Route) {
 		return
 	}
 
-	// Convert router.Middleware to aurelion.Middleware, add auth/authorization, then convert back
-	aurelionMiddlewares := make([]Middleware, 0, len(route.Middlewares)+2)
+	// Convert router.Middleware to core.Middleware for auth middlewares
+	authMiddlewares := make([]router.Middleware, 0, 2)
 
 	if s.authMiddleware != nil {
-		aurelionMiddlewares = append(aurelionMiddlewares, s.authMiddleware)
+		// Convert core.Middleware to router.Middleware
+		authMiddlewares = append(authMiddlewares, func(ctx router.ContextInterface) error {
+			coreCtx := router.AdaptRouterContextToCore(ctx)
+			return s.authMiddleware(coreCtx)
+		})
 	}
 
-	if len(route.RequiredPermissions) > 0 {
-		if s.authzChecker == nil {
-			// Log internally but return generic error to avoid information leakage
-			s.logger.Warnw("authorization required but no checker configured", "path", route.Path)
-			aurelionMiddlewares = append(aurelionMiddlewares, func(ctx Context) error {
-				return ForbiddenPublic(ctx, "insufficient permissions")
-			})
-		} else {
-			aurelionMiddlewares = append(aurelionMiddlewares, s.createAuthorizationMiddleware(route.RequiredPermissions))
-		}
+	if len(route.RequiredPermissions) > 0 && s.authzChecker != nil {
+		authzMw := s.createAuthorizationMiddleware(route.RequiredPermissions)
+		// Convert core.Middleware to router.Middleware
+		authMiddlewares = append(authMiddlewares, func(ctx router.ContextInterface) error {
+			coreCtx := router.AdaptRouterContextToCore(ctx)
+			return authzMw(coreCtx)
+		})
 	}
 
-	// Convert existing router.Middleware to aurelion.Middleware
-	for _, m := range route.Middlewares {
-		if m != nil {
-			aurelionMiddlewares = append(aurelionMiddlewares, convertRouterMiddlewareToAurelion(m))
-		}
-	}
-
-	// Convert back to router.Middleware for storage
-	route.Middlewares = make([]router.Middleware, len(aurelionMiddlewares))
-	for i, m := range aurelionMiddlewares {
-		finalM := m // Capture in closure
-		route.Middlewares[i] = func(ctx router.ContextInterface) error {
-			// Extract underlying context from adapter if it's an adapter
-			if adapter, ok := ctx.(*routerContextAdapter); ok {
-				return finalM(adapter.ctx)
-			}
-			// If not an adapter, this shouldn't happen since we control the flow
-			// Return error as fallback
-			return fmt.Errorf("unexpected context type in middleware")
-		}
-	}
+	// Prepend auth middlewares to route middlewares
+	route.Middlewares = append(authMiddlewares, route.Middlewares...)
 }
 
-func (s *HttpServer) createAuthorizationMiddleware(permissions []string) Middleware {
-	return func(ctx Context) error {
+func (s *HttpServer) createAuthorizationMiddleware(permissions []string) core.Middleware {
+	return func(ctx core.Context) error {
 		if ctx == nil {
-			return ErrContextNil
+			return core.ErrContextNil
 		}
 		if s.authzChecker == nil {
-			return ForbiddenPublic(ctx, "insufficient permissions")
+			return response.Forbidden(ctx, "authorization checker not configured")
 		}
 
 		if err := s.authzChecker(ctx, permissions); err != nil {
-			// Preserve error context but return as forbidden
-			return ForbiddenPublic(ctx, fmt.Sprintf("insufficient permissions: %v", err))
+			return response.Forbidden(ctx, fmt.Sprintf("insufficient permissions: %v", err))
 		}
 		return ctx.Next()
 	}
@@ -325,74 +250,58 @@ func (s *HttpServer) registerRoute(route *router.Route) {
 	}
 
 	if route.CORS != nil {
-		group := s.app.Group("", cors.New(BuildCORSConfigPublic(convertRouterCORS(route.CORS))))
+		group := s.app.Group("", cors.New(middleware.BuildCORSConfig(route.CORS)))
 		handlers := routeHandlers(route)
-		registerWithRouter(group, convertRouterMethod(route.Method), route.Path, handlers)
+		registerWithRouter(group, route.Method, route.Path, handlers)
 		return
 	}
 
-	handlers := routeHandlers(route)
-	registerWithRouter(s.app, convertRouterMethod(route.Method), route.Path, handlers)
-}
-
-func (s *HttpServer) registerGroupRoute(group *router.GroupRoute) {
-	if group == nil {
-		return
-	}
-
-	fiberMiddlewares := buildGroupMiddlewares(group)
-	g := s.app.Group(group.Prefix, fiberMiddlewares...)
-
-	for i := range group.Routes {
-		handlers := buildRouteHandlers(&group.Routes[i])
-		path := group.Routes[i].Path
-		if path == "" {
-			path = "/"
-		}
-		registerWithRouter(g, convertRouterMethod(group.Routes[i].Method), path, handlers)
-	}
+	route.Register(s.app)
 }
 
 func routeHandlers(route *router.Route) []fiber.Handler {
-	return buildRouteHandlers(route)
+	return route.Clone().Handlers()
 }
 
-func registerWithRouter(router fiber.Router, method Method, path string, handlers []fiber.Handler) {
-	if router == nil || len(handlers) == 0 {
+func registerWithRouter(rt fiber.Router, method interface{}, path string, handlers []fiber.Handler) {
+	// Convert method to string
+	var methodStr string
+	switch m := method.(type) {
+	case core.Method:
+		methodStr = string(m)
+	case string:
+		methodStr = m
+	default:
+		// Try to convert router.Method by checking if it's a string type
+		if str, ok := m.(string); ok {
+			methodStr = str
+		} else {
+			return
+		}
+	}
+	if rt == nil || len(handlers) == 0 {
 		return
 	}
 
-	switch method {
-	case MethodGet:
-		router.Get(path, handlers...)
-	case MethodPost:
-		router.Post(path, handlers...)
-	case MethodPut:
-		router.Put(path, handlers...)
-	case MethodPatch:
-		router.Patch(path, handlers...)
-	case MethodDelete:
-		router.Delete(path, handlers...)
-	case MethodHead:
-		router.Head(path, handlers...)
-	case MethodOptions:
-		router.Options(path, handlers...)
+	switch methodStr {
+	case "GET":
+		rt.Get(path, handlers...)
+	case "POST":
+		rt.Post(path, handlers...)
+	case "PUT":
+		rt.Put(path, handlers...)
+	case "PATCH":
+		rt.Patch(path, handlers...)
+	case "DELETE":
+		rt.Delete(path, handlers...)
+	case "HEAD":
+		rt.Head(path, handlers...)
+	case "OPTIONS":
+		rt.Options(path, handlers...)
 	}
 }
 
 // Start starts the HTTP server and blocks until shutdown.
-//
-// Input:
-//   - None (receiver method)
-//
-// Output:
-//   - error: Any error that occurred during server startup or shutdown
-//
-// Example:
-//
-//	if err := server.Start(); err != nil {
-//	    log.Fatal(err)
-//	}
 func (s *HttpServer) Start() error {
 	s.logger.Infow("starting HTTP server",
 		"service", s.config.ServiceName,
@@ -423,12 +332,12 @@ func (s *HttpServer) Start() error {
 }
 
 func (s *HttpServer) shutdown() error {
-	timeout := DefaultShutdownTimeout
+	timeout := config.DefaultShutdownTimeout
 	if s.config.GracefulShutdownTimeout != nil {
 		timeout = *s.config.GracefulShutdownTimeout
 	}
 
-	ctx, cancel := stdctx.WithTimeout(stdctx.Background(), timeout)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
 	if err := s.app.ShutdownWithContext(ctx); err != nil {
@@ -441,17 +350,6 @@ func (s *HttpServer) shutdown() error {
 }
 
 // App exposes the underlying fiber app for advanced customisation.
-//
-// Input:
-//   - None (receiver method)
-//
-// Output:
-//   - *fiber.App: The underlying Fiber application instance
-//
-// Example:
-//
-//	fiberApp := server.App()
-//	fiberApp.Use(customMiddleware)
 func (s *HttpServer) App() *fiber.App {
 	return s.app
 }
