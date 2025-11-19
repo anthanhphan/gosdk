@@ -11,10 +11,9 @@ package jcodec
 // routes non-AMD64 architectures to goccy, but it's here for safety.
 
 // newSonicEngine is a fallback stub for non-AMD64 architectures.
-// It returns a goccy engine as a safe fallback.
-// This should never be reached in normal operation.
+// This should never be called due to build tag routing in newEngineForArch.
+// If this is reached, it indicates a serious logic error.
 func newSonicEngine() engine {
-	// Fallback to goccy engine for non-AMD64 architectures
-	// This ensures the code compiles on all platforms
-	return newGoccyEngine()
+	// This panic indicates a serious bug in the architecture routing logic
+	panic("jcodec: sonic engine requested on non-AMD64 architecture - this should never happen due to build tags")
 }

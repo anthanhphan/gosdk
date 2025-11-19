@@ -15,7 +15,7 @@ MISSPELL ?= misspell
 GOCYCLO ?= gocyclo
 
 .PHONY: all
-all: tidy fmt imports lint vet staticcheck ineffassign misspell cyclo test_coverage security_scan vul
+all: tidy fmt imports lint vet staticcheck ineffassign misspell cyclo test_race test_coverage security_scan vul
 
 # ------------------------------
 # Tool Installation
@@ -55,6 +55,11 @@ tidy:
 # Tests & Coverage
 # ------------------------------
 
+test_race:
+	@echo "Running tests with race detector..."
+	@go clean -testcache
+	@go test -race -count=2 $(PKGS)
+
 test_coverage:
 	@echo "Running tests with coverage..."
 	@mkdir -p $(REPORT_DIR)
@@ -62,6 +67,12 @@ test_coverage:
 	@go test $(PKGS) -coverprofile=$(COVER_OUT)
 	@go tool cover -html=$(COVER_OUT) -o $(COVER_HTML)
 	@echo "Coverage report generated at: $(COVER_HTML)"
+
+bench:
+	@echo "Running benchmarks and saving to report..."
+	@mkdir -p $(REPORT_DIR)
+	@go test -bench=. -benchmem -run=^$$ $(PKGS) | tee $(REPORT_DIR)/benchmark.txt
+	@echo "Benchmark results saved at: $(REPORT_DIR)/benchmark.txt"
 
 
 # ------------------------------

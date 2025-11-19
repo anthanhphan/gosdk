@@ -7,6 +7,9 @@
 package jcodec
 
 import (
+	"bytes"
+	"encoding/json"
+	"io"
 	"runtime"
 	"sync"
 )
@@ -17,10 +20,29 @@ const (
 	arch386   = "386"
 )
 
+// Encoder writes JSON values to an output stream.
+type Encoder interface {
+	Encode(v interface{}) error
+	SetIndent(prefix, indent string)
+	SetEscapeHTML(on bool)
+}
+
+// Decoder reads JSON values from an input stream.
+type Decoder interface {
+	Decode(v interface{}) error
+	Buffered() io.Reader
+	DisallowUnknownFields()
+	UseNumber()
+}
+
 // engine represents a JSON marshaling engine implementation.
 type engine interface {
 	Marshal(v interface{}) ([]byte, error)
 	Unmarshal(data []byte, v interface{}) error
+	MarshalIndent(v interface{}, prefix, indent string) ([]byte, error)
+	Valid(data []byte) bool
+	NewEncoder(w io.Writer) Encoder
+	NewDecoder(r io.Reader) Decoder
 }
 
 var (
@@ -88,4 +110,77 @@ func Marshal(v interface{}) ([]byte, error) {
 //	}
 func Unmarshal(data []byte, v interface{}) error {
 	return getDefaultEngine().Unmarshal(data, v)
+}
+
+// MarshalIndent converts a Go value to pretty-printed JSON bytes using the optimal engine.
+// It works like Marshal but applies indentation to format the output for human readability.
+// Each JSON element will begin on a new line beginning with prefix followed by one or more
+// copies of indent according to the indentation nesting depth.
+//
+// Input:
+//   - v: The value to marshal
+//   - prefix: String to prefix each line with
+//   - indent: String to use for each indentation level
+//
+// Output:
+//   - []byte: The pretty-printed JSON bytes
+//   - error: Any error that occurred during marshaling
+//
+// Example:
+//
+//	user := User{ID: 1, Name: "John"}
+//	data, err := jcodec.MarshalIndent(user, "", "  ")
+//	if err != nil {
+//	    return fmt.Errorf("marshal failed: %w", err)
+//	}
+//	fmt.Println(string(data))
+func MarshalIndent(v interface{}, prefix, indent string) ([]byte, error) {
+	return getDefaultEngine().MarshalIndent(v, prefix, indent)
+}
+
+// Valid reports whether data is a valid JSON encoding.
+// This function validates JSON syntax without unmarshaling into a Go value,
+// making it efficient for validation-only use cases.
+//
+// Input:
+//   - data: The JSON bytes to validate
+//
+// Output:
+//   - bool: true if data is valid JSON, false otherwise
+//
+// Example:
+//
+//	data := []byte(`{"id":1,"name":"John"}`)
+//	if !jcodec.Valid(data) {
+//	    return errors.New("invalid JSON")
+//	}
+func Valid(data []byte) bool {
+	return getDefaultEngine().Valid(data)
+}
+
+// NewEncoder returns a new encoder that writes to w.
+func NewEncoder(w io.Writer) Encoder {
+	return getDefaultEngine().NewEncoder(w)
+}
+
+// NewDecoder returns a new decoder that reads from r.
+func NewDecoder(r io.Reader) Decoder {
+	return getDefaultEngine().NewDecoder(r)
+}
+
+// Compact appends to dst the JSON-encoded src with insignificant space characters elided.
+func Compact(dst *bytes.Buffer, src []byte) error {
+	return json.Compact(dst, src)
+}
+
+// HTMLEscape appends to dst the JSON-encoded src with <, >, &, U+2028 and U+2029
+// characters inside string literals changed to \u003c, \u003e, \u0026, \u2028, \u2029
+// so that the JSON can be safely embedded inside HTML <script> tags.
+func HTMLEscape(dst *bytes.Buffer, src []byte) {
+	json.HTMLEscape(dst, src)
+}
+
+// Indent appends to dst an indented form of the JSON-encoded src.
+func Indent(dst *bytes.Buffer, src []byte, prefix, indent string) error {
+	return json.Indent(dst, src, prefix, indent)
 }

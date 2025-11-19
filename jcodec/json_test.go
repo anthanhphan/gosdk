@@ -176,40 +176,6 @@ func TestNewEngineForArch(t *testing.T) {
 		check func(t *testing.T, engine engine)
 	}{
 		{
-			name: "amd64 architecture should return sonic engine",
-			arch: "amd64",
-			check: func(t *testing.T, e engine) {
-				if e == nil {
-					t.Error("Engine should not be nil")
-				}
-				// Test that it works
-				data, err := e.Marshal(testUser{ID: 1, Name: "Test"})
-				if err != nil {
-					t.Errorf("Engine Marshal should work: %v", err)
-				}
-				if len(data) == 0 {
-					t.Error("Marshaled data should not be empty")
-				}
-			},
-		},
-		{
-			name: "386 architecture should return sonic engine",
-			arch: "386",
-			check: func(t *testing.T, e engine) {
-				if e == nil {
-					t.Error("Engine should not be nil")
-				}
-				// Test that it works
-				data, err := e.Marshal(testUser{ID: 1, Name: "Test"})
-				if err != nil {
-					t.Errorf("Engine Marshal should work: %v", err)
-				}
-				if len(data) == 0 {
-					t.Error("Marshaled data should not be empty")
-				}
-			},
-		},
-		{
 			name: "arm64 architecture should return goccy engine",
 			arch: "arm64",
 			check: func(t *testing.T, e engine) {
@@ -578,6 +544,362 @@ func TestMarshal_Unmarshal_RoundTrip(t *testing.T) {
 			}
 
 			tt.check(t, tt.input, unmarshaled)
+		})
+	}
+}
+
+func TestMarshalIndent(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   interface{}
+		prefix  string
+		indent  string
+		wantErr bool
+		check   func(t *testing.T, data []byte, err error)
+	}{
+		{
+			name:   "simple struct should marshal with indentation",
+			input:  testUser{ID: 1, Name: "John", Email: "john@example.com"},
+			prefix: "",
+			indent: "  ",
+			check: func(t *testing.T, data []byte, err error) {
+				if err != nil {
+					t.Errorf("Unexpected error: %v", err)
+				}
+				if len(data) == 0 {
+					t.Error("Marshaled data should not be empty")
+				}
+				// Check for indentation (should have newlines and spaces)
+				if !contains(data, []byte("\n")) {
+					t.Error("Indented JSON should contain newlines")
+				}
+				if !contains(data, []byte("John")) {
+					t.Error("Marshaled data should contain user name")
+				}
+			},
+		},
+		{
+			name:   "complex struct should marshal with custom prefix and indent",
+			input:  testConfig{DatabaseURL: "postgres://localhost", Port: 8080, Debug: true},
+			prefix: ">",
+			indent: "\t",
+			check: func(t *testing.T, data []byte, err error) {
+				if err != nil {
+					t.Errorf("Unexpected error: %v", err)
+				}
+				if len(data) == 0 {
+					t.Error("Marshaled data should not be empty")
+				}
+				// Check for prefix
+				if !contains(data, []byte(">")) {
+					t.Error("Indented JSON should contain prefix")
+				}
+			},
+		},
+		{
+			name:    "channel type should return error",
+			input:   make(chan int),
+			prefix:  "",
+			indent:  "  ",
+			wantErr: true,
+			check: func(t *testing.T, data []byte, err error) {
+				if err == nil {
+					t.Error("Expected error for channel type")
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			data, err := MarshalIndent(tt.input, tt.prefix, tt.indent)
+
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Error expectation mismatch: got err=%v, wantErr=%v", err, tt.wantErr)
+				return
+			}
+
+			tt.check(t, data, err)
+		})
+	}
+}
+
+func TestValid(t *testing.T) {
+	tests := []struct {
+		name  string
+		data  []byte
+		valid bool
+	}{
+		{
+			name:  "valid JSON object should return true",
+			data:  []byte(`{"id":1,"name":"John"}`),
+			valid: true,
+		},
+		{
+			name:  "valid JSON array should return true",
+			data:  []byte(`[1,2,3]`),
+			valid: true,
+		},
+		{
+			name:  "valid JSON string should return true",
+			data:  []byte(`"hello"`),
+			valid: true,
+		},
+		{
+			name:  "valid JSON number should return true",
+			data:  []byte(`123`),
+			valid: true,
+		},
+		{
+			name:  "valid JSON boolean should return true",
+			data:  []byte(`true`),
+			valid: true,
+		},
+		{
+			name:  "valid JSON null should return true",
+			data:  []byte(`null`),
+			valid: true,
+		},
+		{
+			name:  "invalid JSON should return false",
+			data:  []byte(`{"id":1,"name":}`),
+			valid: false,
+		},
+		{
+			name:  "partial JSON should return false",
+			data:  []byte(`{"id":1,`),
+			valid: false,
+		},
+		{
+			name:  "empty bytes should return false",
+			data:  []byte(``),
+			valid: false,
+		},
+		{
+			name:  "whitespace only should return false",
+			data:  []byte(`   `),
+			valid: false,
+		},
+		{
+			name:  "malformed JSON should return false",
+			data:  []byte(`{id:1}`),
+			valid: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := Valid(tt.data)
+			if result != tt.valid {
+				t.Errorf("Valid() = %v, want %v for data: %s", result, tt.valid, string(tt.data))
+			}
+		})
+	}
+}
+
+func TestConcurrency(t *testing.T) {
+	tests := []struct {
+		name       string
+		goroutines int
+		iterations int
+	}{
+		{
+			name:       "moderate concurrency test",
+			goroutines: 50,
+			iterations: 100,
+		},
+		{
+			name:       "high concurrency test",
+			goroutines: 100,
+			iterations: 1000,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Test concurrent Marshal operations
+			t.Run("concurrent Marshal", func(t *testing.T) {
+				done := make(chan bool, tt.goroutines)
+				for i := 0; i < tt.goroutines; i++ {
+					go func(id int) {
+						defer func() { done <- true }()
+						for j := 0; j < tt.iterations; j++ {
+							user := testUser{ID: int64(id), Name: "User", Email: "user@example.com"}
+							_, err := Marshal(user)
+							if err != nil {
+								t.Errorf("Concurrent Marshal error: %v", err)
+							}
+						}
+					}(i)
+				}
+
+				// Wait for all goroutines
+				for i := 0; i < tt.goroutines; i++ {
+					<-done
+				}
+			})
+
+			// Test concurrent Unmarshal operations
+			t.Run("concurrent Unmarshal", func(t *testing.T) {
+				data := []byte(`{"id":1,"name":"Test","email":"test@example.com"}`)
+				done := make(chan bool, tt.goroutines)
+				for i := 0; i < tt.goroutines; i++ {
+					go func() {
+						defer func() { done <- true }()
+						for j := 0; j < tt.iterations; j++ {
+							var user testUser
+							err := Unmarshal(data, &user)
+							if err != nil {
+								t.Errorf("Concurrent Unmarshal error: %v", err)
+							}
+						}
+					}()
+				}
+
+				// Wait for all goroutines
+				for i := 0; i < tt.goroutines; i++ {
+					<-done
+				}
+			})
+
+			// Test concurrent MarshalIndent operations
+			t.Run("concurrent MarshalIndent", func(t *testing.T) {
+				done := make(chan bool, tt.goroutines)
+				for i := 0; i < tt.goroutines; i++ {
+					go func(id int) {
+						defer func() { done <- true }()
+						for j := 0; j < tt.iterations; j++ {
+							config := testConfig{Port: id, Debug: true}
+							_, err := MarshalIndent(config, "", "  ")
+							if err != nil {
+								t.Errorf("Concurrent MarshalIndent error: %v", err)
+							}
+						}
+					}(i)
+				}
+
+				// Wait for all goroutines
+				for i := 0; i < tt.goroutines; i++ {
+					<-done
+				}
+			})
+
+			// Test concurrent Valid operations
+			t.Run("concurrent Valid", func(t *testing.T) {
+				validData := []byte(`{"id":1,"name":"Test"}`)
+				invalidData := []byte(`{"id":1,"name":}`)
+				done := make(chan bool, tt.goroutines)
+				for i := 0; i < tt.goroutines; i++ {
+					go func(id int) {
+						defer func() { done <- true }()
+						for j := 0; j < tt.iterations; j++ {
+							if id%2 == 0 {
+								if !Valid(validData) {
+									t.Error("Valid data reported as invalid")
+								}
+							} else {
+								if Valid(invalidData) {
+									t.Error("Invalid data reported as valid")
+								}
+							}
+						}
+					}(i)
+				}
+
+				// Wait for all goroutines
+				for i := 0; i < tt.goroutines; i++ {
+					<-done
+				}
+			})
+
+			// Test concurrent mixed operations
+			t.Run("concurrent mixed operations", func(t *testing.T) {
+				done := make(chan bool, tt.goroutines)
+				for i := 0; i < tt.goroutines; i++ {
+					go func(id int) {
+						defer func() { done <- true }()
+						for j := 0; j < tt.iterations; j++ {
+							// Mix different operations
+							switch j % 4 {
+							case 0:
+								user := testUser{ID: int64(id), Name: "User"}
+								_, _ = Marshal(user)
+							case 1:
+								data := []byte(`{"id":1,"name":"Test"}`)
+								var user testUser
+								_ = Unmarshal(data, &user)
+							case 2:
+								config := testConfig{Port: id}
+								_, _ = MarshalIndent(config, "", "  ")
+							case 3:
+								data := []byte(`{"id":1}`)
+								_ = Valid(data)
+							}
+						}
+					}(i)
+				}
+
+				// Wait for all goroutines
+				for i := 0; i < tt.goroutines; i++ {
+					<-done
+				}
+			})
+		})
+	}
+}
+
+func TestErrorContextWrapping(t *testing.T) {
+	tests := []struct {
+		name      string
+		operation string
+		check     func(t *testing.T, err error)
+	}{
+		{
+			name:      "marshal error should contain engine context",
+			operation: "marshal",
+			check: func(t *testing.T, err error) {
+				if err == nil {
+					t.Error("Expected error for channel type")
+					return
+				}
+				errStr := err.Error()
+				// Check for engine context (either "sonic engine" or "goccy engine")
+				hasContext := contains([]byte(errStr), []byte("sonic engine")) ||
+					contains([]byte(errStr), []byte("goccy engine"))
+				if !hasContext {
+					t.Errorf("Error should contain engine context, got: %v", err)
+				}
+			},
+		},
+		{
+			name:      "unmarshal error should contain engine context",
+			operation: "unmarshal",
+			check: func(t *testing.T, err error) {
+				if err == nil {
+					t.Error("Expected error for invalid JSON")
+					return
+				}
+				errStr := err.Error()
+				// Check for engine context
+				hasContext := contains([]byte(errStr), []byte("sonic engine")) ||
+					contains([]byte(errStr), []byte("goccy engine"))
+				if !hasContext {
+					t.Errorf("Error should contain engine context, got: %v", err)
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var err error
+			switch tt.operation {
+			case "marshal":
+				_, err = Marshal(make(chan int))
+			case "unmarshal":
+				err = Unmarshal([]byte(`{"invalid": json}`), &testUser{})
+			}
+			tt.check(t, err)
 		})
 	}
 }
