@@ -138,6 +138,51 @@ func MarshalIndent(v interface{}, prefix, indent string) ([]byte, error) {
 	return getDefaultEngine().MarshalIndent(v, prefix, indent)
 }
 
+// CompactString converts a value to a compact JSON string.
+// It handles two cases:
+// 1. If data is a string, it treats it as a JSON string, validates it, and compacts it.
+// 2. For any other type, it marshals the value to JSON.
+//
+// Input:
+//   - data: The value to convert (string or any other type)
+//
+// Output:
+//   - string: The compact JSON string
+//   - error: Any error that occurred during validation or marshaling
+//
+// Example:
+//
+//	// Case 1: JSON string
+//	jsonStr := `{ "id": 1, "name": "John" }`
+//	compact, err := jcodec.CompactString(jsonStr)
+//	// compact is `{"id":1,"name":"John"}`
+//
+//	// Case 2: Go struct
+//	user := User{ID: 1, Name: "John"}
+//	compact, err := jcodec.CompactString(user)
+//	// compact is `{"id":1,"name":"John"}`
+func CompactString(data interface{}) (string, error) {
+	// If data is a string, try to parse it as JSON first to validate and normalize
+	if str, ok := data.(string); ok && str != "" {
+		var jsonData interface{}
+		if err := Unmarshal([]byte(str), &jsonData); err != nil {
+			return "", err
+		}
+		formatted, err := Marshal(jsonData)
+		if err != nil {
+			return "", err
+		}
+		return string(formatted), nil
+	}
+
+	// For non-string values, marshal directly
+	formatted, err := Marshal(data)
+	if err != nil {
+		return "", err
+	}
+	return string(formatted), nil
+}
+
 // Valid reports whether data is a valid JSON encoding.
 // This function validates JSON syntax without unmarshaling into a Go value,
 // making it efficient for validation-only use cases.
