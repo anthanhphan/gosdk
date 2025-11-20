@@ -412,6 +412,23 @@ func Fatalf(template string, args ...interface{}) {
 	fatalGlobalf(template, args...)
 }
 
+// Fatalw logs a message with structured key-value pairs at error level using the global logger and then exits the program with os.Exit(1).
+// Automatically initializes with default configuration if logger is not initialized.
+//
+// Input:
+//   - msg: Log message
+//   - keysAndValues: Alternating keys and values for structured logging (variadic interface{})
+//
+// Output:
+//   - None (exits program)
+//
+// Example:
+//
+//	logger.Fatalw("Critical error", "error", err.Error(), "component", "database")
+func Fatalw(msg string, keysAndValues ...interface{}) {
+	fatalGlobalStructured(msg, keysAndValues...)
+}
+
 // Flush waits for all queued log entries to be written (for async logger).
 // If async logger is not initialized, this is a no-op.
 //
@@ -493,6 +510,19 @@ func fatalGlobalf(template string, args ...interface{}) {
 	logger := ensureGlobalLogger()
 	msg := fmt.Sprintf(template, args...)
 	logger.log(LevelError, globalCallerSkip, msg)
+	logger.flushOutputs()
+	os.Exit(1)
+}
+
+func fatalGlobalStructured(msg string, keysAndValues ...interface{}) {
+	if async := asyncLoggerInstance; async != nil {
+		fields := async.logger.parseKeysAndValues(keysAndValues...)
+		async.fatalWithSkip(globalCallerSkip, msg, fields)
+		return
+	}
+	logger := ensureGlobalLogger()
+	fields := logger.parseKeysAndValues(keysAndValues...)
+	logger.log(LevelError, globalCallerSkip, msg, fields...)
 	logger.flushOutputs()
 	os.Exit(1)
 }

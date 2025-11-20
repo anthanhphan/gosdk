@@ -398,6 +398,24 @@ func (l *Logger) Fatalf(template string, args ...interface{}) {
 	os.Exit(1)
 }
 
+// Fatalw logs a message with structured key-value pairs at error level and then exits the program with os.Exit(1).
+//
+// Input:
+//   - msg: Log message
+//   - keysAndValues: Alternating keys and values for structured logging (variadic interface{})
+//
+// Output:
+//   - None (exits program)
+//
+// Example:
+//
+//	logger.Fatalw("Critical error", "error", err.Error(), "component", "database")
+func (l *Logger) Fatalw(msg string, keysAndValues ...interface{}) {
+	fields := l.parseKeysAndValues(keysAndValues...)
+	l.log(LevelError, 0, msg, fields...)
+	os.Exit(1)
+}
+
 func (l *Logger) formatArgs(args ...interface{}) (string, []Field) {
 	if len(args) == 0 {
 		return "", nil

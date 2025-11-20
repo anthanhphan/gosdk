@@ -216,6 +216,11 @@ func TestFatalErrorCases(t *testing.T) {
 			testFunc:         "TestFatalZapBuildError",
 			expectedExitCode: 1,
 		},
+		{
+			name:             "Fatalw should exit with code 1",
+			testFunc:         "TestFatalw",
+			expectedExitCode: 1,
+		},
 	}
 
 	for _, tt := range tests {
@@ -274,6 +279,24 @@ func TestFatalZapBuildError(t *testing.T) {
 		LogEncoding: EncodingJSON,
 		OutputPaths: []string{"/dev/null/invalid/path/that/should/not/exist"},
 	})
+}
+
+// TestFatalw tests the Fatalw function
+// This function will be run in a subprocess and should exit with code 1
+func TestFatalw(t *testing.T) {
+	if os.Getenv("GO_TEST_FATAL") != "1" {
+		t.Skip("Skipping fatal test in main process")
+	}
+
+	// Reset singleton state
+	loggerInstance = nil
+	once = sync.Once{}
+
+	// Initialize logger
+	InitDefaultLogger()
+
+	// This should call os.Exit(1)
+	Fatalw("fatal error", "key", "value")
 }
 
 func TestDebug(t *testing.T) {
