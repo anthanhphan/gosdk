@@ -169,7 +169,7 @@ func TestRawMessage_UnmarshalJSON(t *testing.T) {
 	}
 }
 
-func TestCompatibilityWithStdlib(t *testing.T) {
+func TestCompatibilityWithStdlib(_ *testing.T) {
 	// Ensure our interfaces match stdlib
 	var _ json.Marshaler = RawMessage{}
 	var _ json.Unmarshaler = &RawMessage{}

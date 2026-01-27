@@ -15,7 +15,7 @@ func TestReadFileSecurely(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tempDir)
+	defer func() { _ = os.RemoveAll(tempDir) }()
 
 	originalDir, err := os.Getwd()
 	if err != nil {
@@ -97,7 +97,7 @@ func TestReadFileSecurely(t *testing.T) {
 	}
 
 	// Test working directory error by removing current directory
-	os.RemoveAll(tempDir)
+	_ = os.RemoveAll(tempDir)
 	result, err := ReadFileSecurely("test.txt")
 	if err == nil {
 		t.Error("Expected error but got none")
@@ -116,7 +116,7 @@ func TestOpenFileSecurely(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tempDir)
+	defer func() { _ = os.RemoveAll(tempDir) }()
 
 	originalDir, err := os.Getwd()
 	if err != nil {
@@ -159,7 +159,7 @@ func TestOpenFileSecurely(t *testing.T) {
 					t.Error("OpenFileSecurely() should not return nil file")
 					return
 				}
-				file.Close()
+				_ = file.Close()
 			},
 		},
 		{
@@ -177,7 +177,7 @@ func TestOpenFileSecurely(t *testing.T) {
 					t.Error("OpenFileSecurely() should not return nil file")
 					return
 				}
-				file.Close()
+				_ = file.Close()
 			},
 		},
 		{
@@ -186,7 +186,7 @@ func TestOpenFileSecurely(t *testing.T) {
 			flag:    os.O_CREATE | os.O_WRONLY | os.O_TRUNC,
 			perm:    0600,
 			wantErr: true,
-			check: func(t *testing.T, file *os.File, err error) {
+			check: func(t *testing.T, _ *os.File, err error) {
 				if err == nil {
 					t.Error("OpenFileSecurely() expected error but got none")
 					return
@@ -202,7 +202,7 @@ func TestOpenFileSecurely(t *testing.T) {
 			flag:    os.O_CREATE | os.O_WRONLY | os.O_TRUNC,
 			perm:    0600,
 			wantErr: true,
-			check: func(t *testing.T, file *os.File, err error) {
+			check: func(t *testing.T, _ *os.File, err error) {
 				if err == nil {
 					t.Error("OpenFileSecurely() expected error but got none")
 					return
@@ -227,7 +227,7 @@ func TestOpenFileSecurely(t *testing.T) {
 					t.Error("OpenFileSecurely() should not return nil file")
 					return
 				}
-				file.Close()
+				_ = file.Close()
 			},
 		},
 		{
@@ -249,7 +249,7 @@ func TestOpenFileSecurely(t *testing.T) {
 				if _, err := file.WriteString(testContent); err != nil {
 					t.Errorf("Failed to write to file: %v", err)
 				}
-				file.Close()
+				_ = file.Close()
 
 				// Verify content was written
 				data, err := os.ReadFile(testFile)
@@ -282,12 +282,12 @@ func TestOpenFileSecurely(t *testing.T) {
 	}
 
 	// Test with invalid root directory
-	os.RemoveAll(tempDir)
+	_ = os.RemoveAll(tempDir)
 	file, err := OpenFileSecurely("test.log", os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
 	if err == nil {
 		t.Error("OpenFileSecurely() expected error for invalid root directory")
 		if file != nil {
-			file.Close()
+			_ = file.Close()
 		}
 	}
 }

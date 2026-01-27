@@ -22,7 +22,7 @@ func newSonicEngine() engine {
 }
 
 // Marshal converts a Go value to JSON bytes using Sonic's high-performance engine.
-func (e *sonicEngine) Marshal(v interface{}) ([]byte, error) {
+func (*sonicEngine) Marshal(v interface{}) ([]byte, error) {
 	data, err := sonic.Marshal(v)
 	if err != nil {
 		return nil, fmt.Errorf("sonic engine: %w", err)
@@ -31,7 +31,7 @@ func (e *sonicEngine) Marshal(v interface{}) ([]byte, error) {
 }
 
 // Unmarshal converts JSON bytes to a Go value using Sonic's high-performance engine.
-func (e *sonicEngine) Unmarshal(data []byte, v interface{}) error {
+func (*sonicEngine) Unmarshal(data []byte, v interface{}) error {
 	if err := sonic.Unmarshal(data, v); err != nil {
 		return fmt.Errorf("sonic engine: %w", err)
 	}
@@ -39,7 +39,7 @@ func (e *sonicEngine) Unmarshal(data []byte, v interface{}) error {
 }
 
 // MarshalIndent converts a Go value to pretty-printed JSON bytes using Sonic's high-performance engine.
-func (e *sonicEngine) MarshalIndent(v interface{}, prefix, indent string) ([]byte, error) {
+func (*sonicEngine) MarshalIndent(v interface{}, prefix, indent string) ([]byte, error) {
 	data, err := sonic.MarshalIndent(v, prefix, indent)
 	if err != nil {
 		return nil, fmt.Errorf("sonic engine: %w", err)
@@ -48,16 +48,16 @@ func (e *sonicEngine) MarshalIndent(v interface{}, prefix, indent string) ([]byt
 }
 
 // Valid reports whether data is valid JSON using Sonic's validation.
-func (e *sonicEngine) Valid(data []byte) bool {
+func (*sonicEngine) Valid(data []byte) bool {
 	return sonic.Valid(data)
 }
 
 // NewEncoder returns a new encoder that writes to w using Sonic's high-performance engine.
-func (e *sonicEngine) NewEncoder(w io.Writer) Encoder {
+func (*sonicEngine) NewEncoder(w io.Writer) Encoder {
 	return sonic.ConfigDefault.NewEncoder(w)
 }
 
 // NewDecoder returns a new decoder that reads from r using Sonic's high-performance engine.
-func (e *sonicEngine) NewDecoder(r io.Reader) Decoder {
+func (*sonicEngine) NewDecoder(r io.Reader) Decoder {
 	return sonic.ConfigDefault.NewDecoder(r)
 }

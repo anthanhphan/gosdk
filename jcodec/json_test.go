@@ -62,7 +62,7 @@ func TestMarshal(t *testing.T) {
 			name:    "channel type should return error",
 			input:   make(chan int),
 			wantErr: true,
-			check: func(t *testing.T, data []byte, err error) {
+			check: func(t *testing.T, _ []byte, err error) {
 				if err == nil {
 					t.Error("Expected error for channel type")
 				}
@@ -136,7 +136,7 @@ func TestUnmarshal(t *testing.T) {
 			data:    []byte(`{"invalid": json}`),
 			target:  &testUser{},
 			wantErr: true,
-			check: func(t *testing.T, target interface{}, err error) {
+			check: func(t *testing.T, _ interface{}, err error) {
 				if err == nil {
 					t.Error("Expected error for invalid JSON")
 				}
@@ -147,7 +147,7 @@ func TestUnmarshal(t *testing.T) {
 			data:    []byte(`{"id":1}`),
 			target:  nil,
 			wantErr: true,
-			check: func(t *testing.T, target interface{}, err error) {
+			check: func(t *testing.T, _ interface{}, err error) {
 				if err == nil {
 					t.Error("Expected error for nil target")
 				}
@@ -251,7 +251,7 @@ func TestGetDefaultEngine(t *testing.T) {
 		},
 		{
 			name: "getDefaultEngine should return same instance on multiple calls",
-			check: func(t *testing.T, e engine) {
+			check: func(t *testing.T, _ engine) {
 				// Call multiple times - should return same instance due to sync.Once
 				e1 := getDefaultEngine()
 				e2 := getDefaultEngine()
@@ -291,7 +291,7 @@ func TestMarshal_EdgeCases(t *testing.T) {
 			name:    "nil value should marshal successfully",
 			input:   nil,
 			wantErr: false,
-			check: func(t *testing.T, data []byte, err error) {
+			check: func(t *testing.T, _ []byte, err error) {
 				if err != nil {
 					t.Errorf("Unexpected error: %v", err)
 				}
@@ -314,7 +314,7 @@ func TestMarshal_EdgeCases(t *testing.T) {
 			name:    "empty map should marshal successfully",
 			input:   map[string]interface{}{},
 			wantErr: false,
-			check: func(t *testing.T, data []byte, err error) {
+			check: func(t *testing.T, _ []byte, err error) {
 				if err != nil {
 					t.Errorf("Unexpected error: %v", err)
 				}
@@ -324,7 +324,7 @@ func TestMarshal_EdgeCases(t *testing.T) {
 			name:    "empty slice should marshal successfully",
 			input:   []string{},
 			wantErr: false,
-			check: func(t *testing.T, data []byte, err error) {
+			check: func(t *testing.T, _ []byte, err error) {
 				if err != nil {
 					t.Errorf("Unexpected error: %v", err)
 				}
@@ -360,7 +360,7 @@ func TestMarshal_EdgeCases(t *testing.T) {
 			name:    "struct with nil pointer field should marshal successfully",
 			input:   struct{ Ptr *string }{Ptr: nil},
 			wantErr: false,
-			check: func(t *testing.T, data []byte, err error) {
+			check: func(t *testing.T, _ []byte, err error) {
 				if err != nil {
 					t.Errorf("Unexpected error: %v", err)
 				}
@@ -395,7 +395,7 @@ func TestUnmarshal_EdgeCases(t *testing.T) {
 			data:    []byte(`{}`),
 			target:  &testUser{},
 			wantErr: false,
-			check: func(t *testing.T, target interface{}, err error) {
+			check: func(t *testing.T, _ interface{}, err error) {
 				if err != nil {
 					t.Errorf("Unexpected error: %v", err)
 				}
@@ -406,7 +406,7 @@ func TestUnmarshal_EdgeCases(t *testing.T) {
 			data:    []byte(`[]`),
 			target:  &[]string{},
 			wantErr: false,
-			check: func(t *testing.T, target interface{}, err error) {
+			check: func(t *testing.T, _ interface{}, err error) {
 				if err != nil {
 					t.Errorf("Unexpected error: %v", err)
 				}
@@ -417,7 +417,7 @@ func TestUnmarshal_EdgeCases(t *testing.T) {
 			data:    []byte(`null`),
 			target:  &testUser{},
 			wantErr: false,
-			check: func(t *testing.T, target interface{}, err error) {
+			check: func(t *testing.T, _ interface{}, err error) {
 				if err != nil {
 					t.Errorf("Unexpected error: %v", err)
 				}
@@ -428,7 +428,7 @@ func TestUnmarshal_EdgeCases(t *testing.T) {
 			data:    []byte(``),
 			target:  &testUser{},
 			wantErr: true,
-			check: func(t *testing.T, target interface{}, err error) {
+			check: func(t *testing.T, _ interface{}, err error) {
 				if err == nil {
 					t.Error("Expected error for empty bytes")
 				}
@@ -439,7 +439,7 @@ func TestUnmarshal_EdgeCases(t *testing.T) {
 			data:    []byte(`   `),
 			target:  &testUser{},
 			wantErr: true,
-			check: func(t *testing.T, target interface{}, err error) {
+			check: func(t *testing.T, _ interface{}, err error) {
 				if err == nil {
 					t.Error("Expected error for whitespace only")
 				}
@@ -450,7 +450,7 @@ func TestUnmarshal_EdgeCases(t *testing.T) {
 			data:    []byte(`{"id":`),
 			target:  &testUser{},
 			wantErr: true,
-			check: func(t *testing.T, target interface{}, err error) {
+			check: func(t *testing.T, _ interface{}, err error) {
 				if err == nil {
 					t.Error("Expected error for partial JSON")
 				}
@@ -461,7 +461,7 @@ func TestUnmarshal_EdgeCases(t *testing.T) {
 			data:    []byte(`{"id":"not_a_number"}`),
 			target:  &testUser{},
 			wantErr: true, // JSON libraries error on type mismatch
-			check: func(t *testing.T, target interface{}, err error) {
+			check: func(t *testing.T, _ interface{}, err error) {
 				if err == nil {
 					t.Error("Expected error for wrong type in JSON")
 				}
@@ -602,7 +602,7 @@ func TestMarshalIndent(t *testing.T) {
 			prefix:  "",
 			indent:  "  ",
 			wantErr: true,
-			check: func(t *testing.T, data []byte, err error) {
+			check: func(t *testing.T, _ []byte, err error) {
 				if err == nil {
 					t.Error("Expected error for channel type")
 				}
@@ -813,7 +813,7 @@ func TestConcurrency(t *testing.T) {
 			})
 
 			// Test concurrent mixed operations
-			t.Run("concurrent mixed operations", func(t *testing.T) {
+			t.Run("concurrent mixed operations", func(_ *testing.T) {
 				done := make(chan bool, tt.goroutines)
 				for i := 0; i < tt.goroutines; i++ {
 					go func(id int) {

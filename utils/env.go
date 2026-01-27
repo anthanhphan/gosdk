@@ -43,6 +43,14 @@ func GetEnvironment() string {
 	return EnvLocal
 }
 
+// validEnvs is a map of valid environment names for O(1) lookup.
+var validEnvs = map[string]struct{}{
+	EnvLocal:      {},
+	EnvQC:         {},
+	EnvStaging:    {},
+	EnvProduction: {},
+}
+
 // ValidateEnvironment returns an error if the environment is invalid.
 //
 // Input:
@@ -57,11 +65,8 @@ func GetEnvironment() string {
 //	    log.Fatal(err)
 //	}
 func ValidateEnvironment(env string) error {
-	validEnvs := []string{EnvLocal, EnvQC, EnvStaging, EnvProduction}
-	for _, validEnv := range validEnvs {
-		if env == validEnv {
-			return nil
-		}
+	if _, ok := validEnvs[env]; ok {
+		return nil
 	}
 	return fmt.Errorf("invalid environment: %s (must be one of: %s, %s, %s, %s)",
 		env, EnvLocal, EnvQC, EnvStaging, EnvProduction)

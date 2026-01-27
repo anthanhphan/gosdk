@@ -165,7 +165,7 @@ type mockCloser struct {
 	*bytes.Buffer
 }
 
-func (m *mockCloser) Close() error {
+func (*mockCloser) Close() error {
 	return nil
 }
 
@@ -175,8 +175,8 @@ func TestLogger_FlushOutputs(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer os.Remove(tmpFile.Name())
-		defer tmpFile.Close()
+		defer func() { _ = os.Remove(tmpFile.Name()) }()
+		defer func() { _ = tmpFile.Close() }()
 
 		logger := NewLogger(&Config{
 			LogLevel:    LevelInfo,
@@ -194,7 +194,7 @@ func TestLogger_CloseOutputs(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer os.Remove(tmpFile.Name())
+		defer func() { _ = os.Remove(tmpFile.Name()) }()
 
 		logger := NewLogger(&Config{
 			LogLevel:    LevelInfo,
@@ -205,7 +205,7 @@ func TestLogger_CloseOutputs(t *testing.T) {
 		logger.closeOutputs()
 	})
 
-	t.Run("close with nil closers", func(t *testing.T) {
+	t.Run("close with nil closers", func(_ *testing.T) {
 		logger := NewLogger(&Config{
 			LogLevel:    LevelInfo,
 			LogEncoding: EncodingJSON,
@@ -222,7 +222,7 @@ func TestAsyncLogger_LogEdgeCases(t *testing.T) {
 	}, []io.Writer{&buf})
 
 	al := NewAsyncLogger(baseLogger, 1)
-	defer al.Close()
+	defer func() { _ = al.Close() }()
 
 	t.Run("async log with filtered level", func(t *testing.T) {
 		al.log(LevelDebug, 0, "should not log")

@@ -57,7 +57,7 @@ func TestLogger_formatArgs(t *testing.T) {
 			args:    []interface{}{123},
 			wantMsg: "123",
 			wantLen: 0,
-			check: func(t *testing.T, msg string, fields []Field) {
+			check: func(t *testing.T, msg string, _ []Field) {
 				if msg != "123" {
 					t.Errorf("formatArgs() msg = %v, want '123'", msg)
 				}
@@ -82,7 +82,7 @@ func TestLogger_formatArgs(t *testing.T) {
 			args:    []interface{}{123, "key", "value"},
 			wantMsg: "123 key value",
 			wantLen: 0,
-			check: func(t *testing.T, msg string, fields []Field) {
+			check: func(t *testing.T, msg string, _ []Field) {
 				if !strings.Contains(msg, "123") {
 					t.Errorf("formatArgs() msg = %v, want to contain '123'", msg)
 				}
@@ -287,7 +287,7 @@ func TestLogger_log(t *testing.T) {
 			level:  LevelWarn,
 			msg:    "warn message",
 			fields: []Field{String("key", "value")},
-			check: func(t *testing.T, output string) {
+			check: func(t *testing.T, _ string) {
 				// Should not log because warn < error
 				logger.config.LogLevel = LevelError
 				buf.Reset()

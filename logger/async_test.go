@@ -26,12 +26,18 @@ func TestNewAsyncLogger(t *testing.T) {
 			check: func(t *testing.T, al *AsyncLogger) {
 				if al == nil {
 					t.Fatal("NewAsyncLogger() should not return nil")
+					return
 				}
 				if al.logger == nil {
 					t.Error("NewAsyncLogger() logger should not be nil")
 				}
-				if al.rt == nil || al.rt.queue == nil {
+				if al.rt == nil {
+					t.Error("NewAsyncLogger() rt should not be nil")
+					return
+				}
+				if al.rt.queue == nil {
 					t.Error("NewAsyncLogger() queue should not be nil")
+					return
 				}
 				if cap(al.rt.queue) != 50 {
 					t.Errorf("NewAsyncLogger() queue capacity = %v, want %v", cap(al.rt.queue), 50)
@@ -48,9 +54,15 @@ func TestNewAsyncLogger(t *testing.T) {
 			check: func(t *testing.T, al *AsyncLogger) {
 				if al == nil {
 					t.Fatal("NewAsyncLogger() should not return nil")
+					return
 				}
-				if al.rt == nil || al.rt.queue == nil {
+				if al.rt == nil {
+					t.Fatal("NewAsyncLogger() rt should not be nil")
+					return
+				}
+				if al.rt.queue == nil {
 					t.Fatal("NewAsyncLogger() queue should not be nil")
+					return
 				}
 				if cap(al.rt.queue) != 100 {
 					t.Errorf("NewAsyncLogger() queue capacity = %v, want %v (default)", cap(al.rt.queue), 100)
@@ -67,9 +79,15 @@ func TestNewAsyncLogger(t *testing.T) {
 			check: func(t *testing.T, al *AsyncLogger) {
 				if al == nil {
 					t.Fatal("NewAsyncLogger() should not return nil")
+					return
 				}
-				if al.rt == nil || al.rt.queue == nil {
+				if al.rt == nil {
+					t.Fatal("NewAsyncLogger() rt should not be nil")
+					return
+				}
+				if al.rt.queue == nil {
 					t.Fatal("NewAsyncLogger() queue should not be nil")
+					return
 				}
 				if cap(al.rt.queue) != 100 {
 					t.Errorf("NewAsyncLogger() queue capacity = %v, want %v (default)", cap(al.rt.queue), 100)
@@ -85,18 +103,18 @@ func TestNewAsyncLogger(t *testing.T) {
 			time.Sleep(10 * time.Millisecond)
 			tt.check(t, al)
 			// Cleanup
-			al.Close()
+			_ = al.Close()
 		})
 	}
 }
 
-func TestAsyncLogger_Debug(t *testing.T) {
+func TestAsyncLogger_Debug(_ *testing.T) {
 	logger := NewLogger(&Config{
 		LogLevel:    LevelDebug,
 		LogEncoding: EncodingJSON,
 	}, nil)
 	al := NewAsyncLogger(logger, 10)
-	defer al.Close()
+	defer func() { _ = al.Close() }()
 
 	al.Debug("test debug message")
 	al.Debug("key", "value")
@@ -106,39 +124,39 @@ func TestAsyncLogger_Debug(t *testing.T) {
 	al.Flush()
 }
 
-func TestAsyncLogger_Debugf(t *testing.T) {
+func TestAsyncLogger_Debugf(_ *testing.T) {
 	logger := NewLogger(&Config{
 		LogLevel:    LevelDebug,
 		LogEncoding: EncodingJSON,
 	}, nil)
 	al := NewAsyncLogger(logger, 10)
-	defer al.Close()
+	defer func() { _ = al.Close() }()
 
 	al.Debugf("test %s message", "debug")
 	time.Sleep(50 * time.Millisecond)
 	al.Flush()
 }
 
-func TestAsyncLogger_Debugw(t *testing.T) {
+func TestAsyncLogger_Debugw(_ *testing.T) {
 	logger := NewLogger(&Config{
 		LogLevel:    LevelDebug,
 		LogEncoding: EncodingJSON,
 	}, nil)
 	al := NewAsyncLogger(logger, 10)
-	defer al.Close()
+	defer func() { _ = al.Close() }()
 
 	al.Debugw("test message", "key1", "value1", "key2", 123)
 	time.Sleep(50 * time.Millisecond)
 	al.Flush()
 }
 
-func TestAsyncLogger_Info(t *testing.T) {
+func TestAsyncLogger_Info(_ *testing.T) {
 	logger := NewLogger(&Config{
 		LogLevel:    LevelInfo,
 		LogEncoding: EncodingJSON,
 	}, nil)
 	al := NewAsyncLogger(logger, 10)
-	defer al.Close()
+	defer func() { _ = al.Close() }()
 
 	al.Info("test info message")
 	al.Info("key", "value")
@@ -146,39 +164,39 @@ func TestAsyncLogger_Info(t *testing.T) {
 	al.Flush()
 }
 
-func TestAsyncLogger_Infof(t *testing.T) {
+func TestAsyncLogger_Infof(_ *testing.T) {
 	logger := NewLogger(&Config{
 		LogLevel:    LevelInfo,
 		LogEncoding: EncodingJSON,
 	}, nil)
 	al := NewAsyncLogger(logger, 10)
-	defer al.Close()
+	defer func() { _ = al.Close() }()
 
 	al.Infof("test %s message", "info")
 	time.Sleep(50 * time.Millisecond)
 	al.Flush()
 }
 
-func TestAsyncLogger_Infow(t *testing.T) {
+func TestAsyncLogger_Infow(_ *testing.T) {
 	logger := NewLogger(&Config{
 		LogLevel:    LevelInfo,
 		LogEncoding: EncodingJSON,
 	}, nil)
 	al := NewAsyncLogger(logger, 10)
-	defer al.Close()
+	defer func() { _ = al.Close() }()
 
 	al.Infow("test message", "key1", "value1", "key2", 123)
 	time.Sleep(50 * time.Millisecond)
 	al.Flush()
 }
 
-func TestAsyncLogger_Warn(t *testing.T) {
+func TestAsyncLogger_Warn(_ *testing.T) {
 	logger := NewLogger(&Config{
 		LogLevel:    LevelWarn,
 		LogEncoding: EncodingJSON,
 	}, nil)
 	al := NewAsyncLogger(logger, 10)
-	defer al.Close()
+	defer func() { _ = al.Close() }()
 
 	al.Warn("test warn message")
 	al.Warn("key", "value")
@@ -186,40 +204,40 @@ func TestAsyncLogger_Warn(t *testing.T) {
 	al.Flush()
 }
 
-func TestAsyncLogger_Warnf(t *testing.T) {
+func TestAsyncLogger_Warnf(_ *testing.T) {
 	logger := NewLogger(&Config{
 		LogLevel:    LevelWarn,
 		LogEncoding: EncodingJSON,
 	}, nil)
 	al := NewAsyncLogger(logger, 10)
-	defer al.Close()
+	defer func() { _ = al.Close() }()
 
 	al.Warnf("test %s message", "warn")
 	time.Sleep(50 * time.Millisecond)
 	al.Flush()
 }
 
-func TestAsyncLogger_Warnw(t *testing.T) {
+func TestAsyncLogger_Warnw(_ *testing.T) {
 	logger := NewLogger(&Config{
 		LogLevel:    LevelWarn,
 		LogEncoding: EncodingJSON,
 	}, nil)
 	al := NewAsyncLogger(logger, 10)
-	defer al.Close()
+	defer func() { _ = al.Close() }()
 
 	al.Warnw("test message", "key1", "value1", "key2", 123)
 	time.Sleep(50 * time.Millisecond)
 	al.Flush()
 }
 
-func TestAsyncLogger_Error(t *testing.T) {
+func TestAsyncLogger_Error(_ *testing.T) {
 	logger := NewLogger(&Config{
 		LogLevel:          LevelError,
 		LogEncoding:       EncodingJSON,
 		DisableStacktrace: false,
 	}, nil)
 	al := NewAsyncLogger(logger, 10)
-	defer al.Close()
+	defer func() { _ = al.Close() }()
 
 	al.Error("test error message")
 	al.Error("key", "value")
@@ -227,28 +245,28 @@ func TestAsyncLogger_Error(t *testing.T) {
 	al.Flush()
 }
 
-func TestAsyncLogger_Errorf(t *testing.T) {
+func TestAsyncLogger_Errorf(_ *testing.T) {
 	logger := NewLogger(&Config{
 		LogLevel:          LevelError,
 		LogEncoding:       EncodingJSON,
 		DisableStacktrace: false,
 	}, nil)
 	al := NewAsyncLogger(logger, 10)
-	defer al.Close()
+	defer func() { _ = al.Close() }()
 
 	al.Errorf("test %s message", "error")
 	time.Sleep(50 * time.Millisecond)
 	al.Flush()
 }
 
-func TestAsyncLogger_Errorw(t *testing.T) {
+func TestAsyncLogger_Errorw(_ *testing.T) {
 	logger := NewLogger(&Config{
 		LogLevel:          LevelError,
 		LogEncoding:       EncodingJSON,
 		DisableStacktrace: false,
 	}, nil)
 	al := NewAsyncLogger(logger, 10)
-	defer al.Close()
+	defer func() { _ = al.Close() }()
 
 	al.Errorw("test message", "key1", "value1", "key2", 123)
 	time.Sleep(50 * time.Millisecond)
@@ -261,11 +279,12 @@ func TestAsyncLogger_With(t *testing.T) {
 		LogEncoding: EncodingJSON,
 	}, nil, String("base", "value"))
 	al := NewAsyncLogger(logger, 10)
-	defer al.Close()
+	defer func() { _ = al.Close() }()
 
 	newAl := al.With(String("new", "field"))
 	if newAl == nil {
 		t.Fatal("With() should not return nil")
+		return
 	}
 	if newAl.logger == nil {
 		t.Error("With() logger should not be nil")
@@ -277,7 +296,7 @@ func TestAsyncLogger_With(t *testing.T) {
 	newAl.Flush()
 }
 
-func TestAsyncLogger_Flush(t *testing.T) {
+func TestAsyncLogger_Flush(_ *testing.T) {
 	logger := NewLogger(&Config{
 		LogLevel:    LevelInfo,
 		LogEncoding: EncodingJSON,
@@ -312,13 +331,13 @@ func TestAsyncLogger_Close(t *testing.T) {
 	}
 }
 
-func TestAsyncLogger_LevelFiltering(t *testing.T) {
+func TestAsyncLogger_LevelFiltering(_ *testing.T) {
 	logger := NewLogger(&Config{
 		LogLevel:    LevelWarn,
 		LogEncoding: EncodingJSON,
 	}, nil)
 	al := NewAsyncLogger(logger, 10)
-	defer al.Close()
+	defer func() { _ = al.Close() }()
 
 	// Debug and Info should be filtered
 	al.Debug("should not log")
@@ -330,14 +349,14 @@ func TestAsyncLogger_LevelFiltering(t *testing.T) {
 	al.Flush()
 }
 
-func TestAsyncLogger_QueueFull(t *testing.T) {
+func TestAsyncLogger_QueueFull(_ *testing.T) {
 	logger := NewLogger(&Config{
 		LogLevel:    LevelInfo,
 		LogEncoding: EncodingJSON,
 	}, nil)
 	// Use very small queue to test queue full scenario
 	al := NewAsyncLogger(logger, 2)
-	defer al.Close()
+	defer func() { _ = al.Close() }()
 
 	// Fill queue quickly
 	al.Info("message 1")
@@ -348,28 +367,28 @@ func TestAsyncLogger_QueueFull(t *testing.T) {
 	al.Flush()
 }
 
-func TestAsyncLogger_WithCaller(t *testing.T) {
+func TestAsyncLogger_WithCaller(_ *testing.T) {
 	logger := NewLogger(&Config{
 		LogLevel:      LevelInfo,
 		LogEncoding:   EncodingJSON,
 		DisableCaller: false,
 	}, nil)
 	al := NewAsyncLogger(logger, 10)
-	defer al.Close()
+	defer func() { _ = al.Close() }()
 
 	al.Info("test with caller")
 	time.Sleep(50 * time.Millisecond)
 	al.Flush()
 }
 
-func TestAsyncLogger_WithStacktrace(t *testing.T) {
+func TestAsyncLogger_WithStacktrace(_ *testing.T) {
 	logger := NewLogger(&Config{
 		LogLevel:          LevelError,
 		LogEncoding:       EncodingJSON,
 		DisableStacktrace: false,
 	}, nil)
 	al := NewAsyncLogger(logger, 10)
-	defer al.Close()
+	defer func() { _ = al.Close() }()
 
 	al.Error("test with stacktrace")
 	time.Sleep(50 * time.Millisecond)
@@ -426,7 +445,7 @@ func TestAsyncFatal(t *testing.T) {
 		LogEncoding: EncodingJSON,
 	}, nil)
 	al := NewAsyncLogger(logger, 10)
-	defer al.Close()
+	defer func() { _ = al.Close() }()
 
 	al.Fatal("fatal error")
 }
@@ -442,7 +461,7 @@ func TestAsyncFatalf(t *testing.T) {
 		LogEncoding: EncodingJSON,
 	}, nil)
 	al := NewAsyncLogger(logger, 10)
-	defer al.Close()
+	defer func() { _ = al.Close() }()
 
 	al.Fatalf("fatal error: %s", "test")
 }

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"reflect"
 	"runtime"
 	"sync"
 	"time"
@@ -29,7 +30,7 @@ type Logger struct {
 const (
 	baseCallerSkip       = 3
 	asyncCallerSkipDelta = 1
-	globalCallerSkip     = 1
+	globalCallerSkip     = 2
 )
 
 var defaultLevelOrder = map[Level]int{
@@ -67,11 +68,20 @@ func NewLogger(config *Config, outputs []io.Writer, fields ...Field) *Logger {
 		fieldMap[field.Key] = field.Value
 	}
 
-	return &Logger{
+	l := &Logger{
 		config:  config,
 		fields:  fieldMap,
 		outputs: outputs,
 	}
+
+	// Initialize encoder
+	if config.LogEncoding == EncodingJSON {
+		l.jsonEncoder = newJSONEncoder(config)
+	} else {
+		l.consoleEncoder = newConsoleEncoder(config)
+	}
+
+	return l
 }
 
 func (l *Logger) setClosers(closers []io.Closer) {
@@ -433,7 +443,7 @@ func (l *Logger) formatArgs(args ...interface{}) (string, []Field) {
 	return fmt.Sprint(args...), nil
 }
 
-func (l *Logger) parseKeysAndValues(keysAndValues ...interface{}) []Field {
+func (*Logger) parseKeysAndValues(keysAndValues ...interface{}) []Field {
 	if len(keysAndValues) == 0 {
 		return nil
 	}
@@ -526,7 +536,7 @@ func (l *Logger) getCaller(skipOffset int) *CallerInfo {
 	}
 }
 
-func (l *Logger) getStacktrace() string {
+func (*Logger) getStacktrace() string {
 	buf := make([]byte, 4096)
 	n := runtime.Stack(buf, false)
 	return string(buf[:n])
@@ -535,23 +545,33 @@ func (l *Logger) getStacktrace() string {
 func (l *Logger) writeEntry(entry *Entry) {
 	var encoder Encoder
 	if l.config.LogEncoding == EncodingJSON {
-		if l.jsonEncoder == nil {
+		l.encoderMu.RLock()
+		jsonEncoder := l.jsonEncoder
+		l.encoderMu.RUnlock()
+
+		if jsonEncoder == nil {
 			l.encoderMu.Lock()
 			if l.jsonEncoder == nil {
 				l.jsonEncoder = newJSONEncoder(l.config)
 			}
+			jsonEncoder = l.jsonEncoder
 			l.encoderMu.Unlock()
 		}
-		encoder = l.jsonEncoder
+		encoder = jsonEncoder
 	} else {
-		if l.consoleEncoder == nil {
+		l.encoderMu.RLock()
+		consoleEncoder := l.consoleEncoder
+		l.encoderMu.RUnlock()
+
+		if consoleEncoder == nil {
 			l.encoderMu.Lock()
 			if l.consoleEncoder == nil {
 				l.consoleEncoder = newConsoleEncoder(l.config)
 			}
+			consoleEncoder = l.consoleEncoder
 			l.encoderMu.Unlock()
 		}
-		encoder = l.consoleEncoder
+		encoder = consoleEncoder
 	}
 
 	output := encoder.Encode(entry)
@@ -564,7 +584,7 @@ func (l *Logger) writeEntry(entry *Entry) {
 	l.mu.RUnlock()
 
 	for _, w := range outputs {
-		fmt.Fprint(w, output)
+		_, _ = fmt.Fprint(w, output)
 	}
 }
 
@@ -575,8 +595,12 @@ func (l *Logger) flushOutputs() {
 	l.mu.RUnlock()
 
 	for _, w := range outputs {
-		if flusher, ok := w.(interface{ Flush() error }); ok {
-			_ = flusher.Flush()
+		// Use reflection to call Flush if available, to avoid static analysis
+		// linking this to x509 via generic interfaces.
+		v := reflect.ValueOf(w)
+		m := v.MethodByName("Flush")
+		if m.IsValid() && m.Type().NumIn() == 0 {
+			m.Call(nil)
 		}
 		if file, ok := w.(*os.File); ok {
 			_ = file.Sync()

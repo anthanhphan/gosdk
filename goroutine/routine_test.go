@@ -28,22 +28,22 @@ func TestRun(t *testing.T) {
 	}{
 		{
 			name: "function with string argument should execute successfully",
-			fn: func(msg string) {
+			fn: func(_ string) {
 				// Test will verify execution via channel
 			},
 			args: []any{"test message"},
-			check: func(t *testing.T) {
+			check: func(_ *testing.T) {
 				// Basic execution test - if no panic, it's successful
 				time.Sleep(50 * time.Millisecond)
 			},
 		},
 		{
 			name: "function with multiple arguments should execute successfully",
-			fn: func(a, b int) {
+			fn: func(_, _ int) {
 				// Test will verify execution
 			},
 			args: []any{10, 20},
-			check: func(t *testing.T) {
+			check: func(_ *testing.T) {
 				time.Sleep(50 * time.Millisecond)
 			},
 		},
@@ -53,7 +53,7 @@ func TestRun(t *testing.T) {
 				// Test will verify execution
 			},
 			args: []any{},
-			check: func(t *testing.T) {
+			check: func(_ *testing.T) {
 				time.Sleep(50 * time.Millisecond)
 			},
 		},
@@ -96,7 +96,7 @@ func TestRun_WithArguments(t *testing.T) {
 				assert.Equal(t, "test", msg)
 			},
 			args: []any{"test"},
-			check: func(t *testing.T, result any) {
+			check: func(_ *testing.T, _ any) {
 				time.Sleep(50 * time.Millisecond)
 			},
 		},
@@ -107,7 +107,7 @@ func TestRun_WithArguments(t *testing.T) {
 				assert.Equal(t, 20, b)
 			},
 			args: []any{10, 20},
-			check: func(t *testing.T, result any) {
+			check: func(_ *testing.T, _ any) {
 				time.Sleep(50 * time.Millisecond)
 			},
 		},
@@ -137,7 +137,7 @@ func TestRun_PanicRecovery(t *testing.T) {
 			},
 			args:    []any{},
 			wantErr: true,
-			check: func(t *testing.T) {
+			check: func(_ *testing.T) {
 				time.Sleep(100 * time.Millisecond)
 				// Panic should be recovered, test should complete
 			},
@@ -149,7 +149,7 @@ func TestRun_PanicRecovery(t *testing.T) {
 			},
 			args:    []any{},
 			wantErr: true,
-			check: func(t *testing.T) {
+			check: func(_ *testing.T) {
 				time.Sleep(100 * time.Millisecond)
 				// Panic should be recovered, test should complete
 			},
@@ -161,7 +161,7 @@ func TestRun_PanicRecovery(t *testing.T) {
 			},
 			args:    []any{},
 			wantErr: true,
-			check: func(t *testing.T) {
+			check: func(_ *testing.T) {
 				time.Sleep(100 * time.Millisecond)
 				// Panic should be recovered, test should complete
 			},
@@ -189,7 +189,7 @@ func TestRun_InvalidFunction(t *testing.T) {
 			name: "non-function value should not cause panic",
 			fn:   "not a function",
 			args: []any{},
-			check: func(t *testing.T) {
+			check: func(_ *testing.T) {
 				time.Sleep(50 * time.Millisecond)
 				// Should log error but not panic
 			},
@@ -198,7 +198,7 @@ func TestRun_InvalidFunction(t *testing.T) {
 			name: "nil function should not cause panic",
 			fn:   nil,
 			args: []any{},
-			check: func(t *testing.T) {
+			check: func(_ *testing.T) {
 				time.Sleep(50 * time.Millisecond)
 				// Should log error but not panic
 			},
@@ -228,7 +228,7 @@ func TestInvoke(t *testing.T) {
 				assert.Equal(t, "test", msg)
 			},
 			args: []any{"test"},
-			check: func(t *testing.T) {
+			check: func(_ *testing.T) {
 				// Function should execute
 			},
 		},
@@ -236,17 +236,17 @@ func TestInvoke(t *testing.T) {
 			name: "invalid function type should log error",
 			fn:   "not a function",
 			args: []any{},
-			check: func(t *testing.T) {
+			check: func(_ *testing.T) {
 				// Should log error but not panic
 			},
 		},
 		{
 			name: "function with insufficient arguments should log error",
-			fn: func(a, b int) {
+			fn: func(_, _ int) {
 				t.Error("Should not execute")
 			},
 			args: []any{10},
-			check: func(t *testing.T) {
+			check: func(_ *testing.T) {
 				// Should log error about insufficient arguments
 			},
 		},
@@ -258,7 +258,7 @@ func TestInvoke(t *testing.T) {
 				_ = s
 			},
 			args: []any{123},
-			check: func(t *testing.T) {
+			check: func(_ *testing.T) {
 				// Should log error about type mismatch
 				time.Sleep(10 * time.Millisecond)
 			},
@@ -287,7 +287,7 @@ func TestInvoke_TypeConversion(t *testing.T) {
 				assert.Equal(t, int32(10), n)
 			},
 			args: []any{10},
-			check: func(t *testing.T) {
+			check: func(_ *testing.T) {
 				// Should execute successfully
 			},
 		},
@@ -297,7 +297,7 @@ func TestInvoke_TypeConversion(t *testing.T) {
 				assert.Equal(t, int64(10), n)
 			},
 			args: []any{10},
-			check: func(t *testing.T) {
+			check: func(_ *testing.T) {
 				// Should execute successfully
 			},
 		},
@@ -321,21 +321,21 @@ func TestRecoverPanic(t *testing.T) {
 		{
 			name:  "string panic should be recovered with location",
 			panic: "test panic",
-			check: func(t *testing.T) {
+			check: func(_ *testing.T) {
 				// Should not crash
 			},
 		},
 		{
 			name:  "error panic should be recovered with location",
 			panic: fmt.Errorf("test error"),
-			check: func(t *testing.T) {
+			check: func(_ *testing.T) {
 				// Should not crash
 			},
 		},
 		{
 			name:  "integer panic should be recovered with location",
 			panic: 123,
-			check: func(t *testing.T) {
+			check: func(_ *testing.T) {
 				// Should not crash
 			},
 		},
@@ -676,22 +676,22 @@ func TestInvoke_ExcessArguments(t *testing.T) {
 	}{
 		{
 			name: "function with excess arguments should log warning",
-			fn: func(a int) {
+			fn: func(_ int) {
 				// Function should execute with first argument
 			},
 			args: []any{10, 20, 30},
-			check: func(t *testing.T) {
+			check: func(_ *testing.T) {
 				// Should log warning about excess arguments but still execute
 				time.Sleep(50 * time.Millisecond)
 			},
 		},
 		{
 			name: "function with exact arguments should not log warning",
-			fn: func(a, b int) {
+			fn: func(_, _ int) {
 				// Function should execute
 			},
 			args: []any{10, 20},
-			check: func(t *testing.T) {
+			check: func(_ *testing.T) {
 				time.Sleep(50 * time.Millisecond)
 			},
 		},
@@ -723,7 +723,7 @@ func TestConvertArguments_EdgeCases(t *testing.T) {
 			},
 			args:    []any{nil},
 			wantErr: false, // nil is valid for pointer type
-			check: func(t *testing.T) {
+			check: func(_ *testing.T) {
 				time.Sleep(50 * time.Millisecond)
 			},
 		},
@@ -734,18 +734,18 @@ func TestConvertArguments_EdgeCases(t *testing.T) {
 			},
 			args:    []any{uint(10)},
 			wantErr: false,
-			check: func(t *testing.T) {
+			check: func(_ *testing.T) {
 				time.Sleep(50 * time.Millisecond)
 			},
 		},
 		{
 			name: "float to int conversion should fail",
-			fn: func(n int) {
+			fn: func(_ int) {
 				// Should not execute due to type conversion failure
 			},
 			args:    []any{10.5},
 			wantErr: true,
-			check: func(t *testing.T) {
+			check: func(_ *testing.T) {
 				// Function should not execute, error should be logged
 				time.Sleep(50 * time.Millisecond)
 				// No assertion needed - if function executed, test will fail
@@ -773,7 +773,7 @@ func TestRecoverPanic_WithLocation(t *testing.T) {
 			name:           "panic with caller location should use caller location as fallback",
 			panicValue:     "test panic",
 			callerLocation: "test.go:123",
-			check: func(t *testing.T) {
+			check: func(_ *testing.T) {
 				time.Sleep(50 * time.Millisecond)
 			},
 		},
@@ -781,7 +781,7 @@ func TestRecoverPanic_WithLocation(t *testing.T) {
 			name:           "panic without caller location should still recover",
 			panicValue:     "test panic",
 			callerLocation: "",
-			check: func(t *testing.T) {
+			check: func(_ *testing.T) {
 				time.Sleep(50 * time.Millisecond)
 			},
 		},
@@ -917,7 +917,7 @@ func TestConvertArguments_NilPointer(t *testing.T) {
 				}
 			},
 			args: []any{nil},
-			check: func(t *testing.T) {
+			check: func(_ *testing.T) {
 				time.Sleep(50 * time.Millisecond)
 			},
 		},
@@ -929,7 +929,7 @@ func TestConvertArguments_NilPointer(t *testing.T) {
 				}
 			},
 			args: []any{nil},
-			check: func(t *testing.T) {
+			check: func(_ *testing.T) {
 				time.Sleep(50 * time.Millisecond)
 			},
 		},
@@ -944,7 +944,7 @@ func TestConvertArguments_NilPointer(t *testing.T) {
 }
 
 // TestRecoverPanic_NoPanic tests recoverPanic when no panic occurs.
-func TestRecoverPanic_NoPanic(t *testing.T) {
+func TestRecoverPanic_NoPanic(_ *testing.T) {
 	func() {
 		defer recoverPanic("test.go:123")
 		// No panic - should return normally
@@ -1114,7 +1114,7 @@ func TestFrameFilter_ShouldSkip(t *testing.T) {
 }
 
 // TestCapturePanicLocation tests capturePanicLocation function.
-func TestCapturePanicLocation(t *testing.T) {
+func TestCapturePanicLocation(_ *testing.T) {
 	func() {
 		defer recoverPanic("fallback.go:123")
 		// Capture location - in non-panic context, location might be empty
@@ -1254,11 +1254,11 @@ func TestConvertArguments_NilHandling(t *testing.T) {
 	}{
 		{
 			name: "nil for non-pointer non-interface should fail",
-			fn: func(s string) {
+			fn: func(_ string) {
 				t.Error("Should not execute")
 			},
 			args: []any{nil},
-			check: func(t *testing.T) {
+			check: func(_ *testing.T) {
 				time.Sleep(50 * time.Millisecond)
 			},
 		},
@@ -1270,7 +1270,7 @@ func TestConvertArguments_NilHandling(t *testing.T) {
 				}
 			},
 			args: []any{nil},
-			check: func(t *testing.T) {
+			check: func(_ *testing.T) {
 				time.Sleep(50 * time.Millisecond)
 			},
 		},
@@ -1282,7 +1282,7 @@ func TestConvertArguments_NilHandling(t *testing.T) {
 				}
 			},
 			args: []any{nil},
-			check: func(t *testing.T) {
+			check: func(_ *testing.T) {
 				time.Sleep(50 * time.Millisecond)
 			},
 		},
@@ -1297,7 +1297,7 @@ func TestConvertArguments_NilHandling(t *testing.T) {
 }
 
 // TestRecoverPanic_LocationFallback tests recoverPanic location fallback.
-func TestRecoverPanic_LocationFallback(t *testing.T) {
+func TestRecoverPanic_LocationFallback(_ *testing.T) {
 	func() {
 		defer recoverPanic("fallback.go:999")
 		panic("test")
@@ -1306,7 +1306,7 @@ func TestRecoverPanic_LocationFallback(t *testing.T) {
 }
 
 // TestRecoverPanic_EmptyLocation tests recoverPanic with empty captured location.
-func TestRecoverPanic_EmptyLocation(t *testing.T) {
+func TestRecoverPanic_EmptyLocation(_ *testing.T) {
 	func() {
 		defer recoverPanic("")
 		panic("test")

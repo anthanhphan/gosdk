@@ -4,7 +4,7 @@ package utils
 
 import (
 	"fmt"
-	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -45,13 +45,7 @@ func ReadFileSecurely(path string) ([]byte, error) {
 	}
 
 	// Open the file using the restricted filesystem
-	file, err := rootFS.Open(cleanPath)
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-
-	return io.ReadAll(file)
+	return fs.ReadFile(rootFS, cleanPath)
 }
 
 // OpenFileSecurely opens a file for writing securely by preventing directory traversal attacks.

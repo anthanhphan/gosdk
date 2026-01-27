@@ -23,6 +23,7 @@ func TestConsoleEncoder_Creation(t *testing.T) {
 			check: func(t *testing.T, encoder *ConsoleEncoder) {
 				if encoder == nil {
 					t.Fatal("newConsoleEncoder() should not return nil")
+					return
 				}
 				if encoder.config == nil {
 					t.Error("newConsoleEncoder() config should not be nil")

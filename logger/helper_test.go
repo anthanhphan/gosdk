@@ -30,6 +30,7 @@ func TestBuildLoggerConfig(t *testing.T) {
 			check: func(t *testing.T, logger *Logger) {
 				if logger == nil {
 					t.Fatal("Logger should be created")
+					return
 				}
 				if logger.config.LogLevel != LevelDebug {
 					t.Errorf("LogLevel = %v, want %v", logger.config.LogLevel, LevelDebug)
@@ -59,6 +60,7 @@ func TestBuildLoggerConfig(t *testing.T) {
 			check: func(t *testing.T, logger *Logger) {
 				if logger == nil {
 					t.Fatal("Logger should be created")
+					return
 				}
 				if logger.config.LogLevel != LevelInfo {
 					t.Errorf("LogLevel = %v, want %v", logger.config.LogLevel, LevelInfo)
@@ -91,6 +93,7 @@ func TestBuildLoggerConfig(t *testing.T) {
 			check: func(t *testing.T, logger *Logger) {
 				if logger == nil {
 					t.Fatal("Logger should be created")
+					return
 				}
 				if logger.config.LogLevel != LevelWarn {
 					t.Errorf("LogLevel = %v, want %v", logger.config.LogLevel, LevelWarn)

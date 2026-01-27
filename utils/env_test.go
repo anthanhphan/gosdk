@@ -12,9 +12,9 @@ func TestGetEnvironment(t *testing.T) {
 	originalEnv := os.Getenv("ENV")
 	defer func() {
 		if originalEnv == "" {
-			os.Unsetenv("ENV")
+			_ = os.Unsetenv("ENV")
 		} else {
-			os.Setenv("ENV", originalEnv)
+			_ = os.Setenv("ENV", originalEnv)
 		}
 	}()
 
@@ -66,9 +66,9 @@ func TestGetEnvironment(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Setup environment
 			if tt.shouldSetEnv {
-				os.Setenv("ENV", tt.envValue)
+				_ = os.Setenv("ENV", tt.envValue)
 			} else {
-				os.Unsetenv("ENV")
+				_ = os.Unsetenv("ENV")
 			}
 
 			// Execute

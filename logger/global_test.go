@@ -1093,7 +1093,7 @@ func TestInitAsyncLogger(t *testing.T) {
 	}
 }
 
-func TestInitAsyncLogger_GlobalFunctions(t *testing.T) {
+func TestInitAsyncLogger_GlobalFunctions(_ *testing.T) {
 	// Reset singleton state for testing
 	asyncLoggerInstance = nil
 	asyncOnce = sync.Once{}
@@ -1115,7 +1115,7 @@ func TestInitAsyncLogger_GlobalFunctions(t *testing.T) {
 	Flush()
 }
 
-func TestGlobalFunctions_WithAsyncLogger(t *testing.T) {
+func TestGlobalFunctions_WithAsyncLogger(_ *testing.T) {
 	// Reset singleton state for testing
 	asyncLoggerInstance = nil
 	asyncOnce = sync.Once{}
