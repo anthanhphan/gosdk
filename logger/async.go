@@ -127,7 +127,7 @@ func (al *AsyncLogger) log(level Level, skipOffset int, msg string, fields ...Fi
 //	asyncLogger.Debug("Processing user", "user_id", 12345, "action", "create")
 func (al *AsyncLogger) Debug(args ...interface{}) {
 	msg, fields := al.logger.formatArgs(args...)
-	al.log(LevelDebug, 0, msg, fields...)
+	al.log(LevelDebug, 1, msg, fields...)
 }
 
 // Debugf logs a formatted message at debug level asynchronously using Printf-style formatting.
@@ -144,7 +144,7 @@ func (al *AsyncLogger) Debug(args ...interface{}) {
 //	asyncLogger.Debugf("Processing user %s with id %d", "john", 12345)
 func (al *AsyncLogger) Debugf(template string, args ...interface{}) {
 	msg := fmt.Sprintf(template, args...)
-	al.log(LevelDebug, 0, msg)
+	al.log(LevelDebug, 1, msg)
 }
 
 // Debugw logs a message with structured key-value pairs at debug level asynchronously.
@@ -161,7 +161,7 @@ func (al *AsyncLogger) Debugf(template string, args ...interface{}) {
 //	asyncLogger.Debugw("Request received", "method", "GET", "path", "/api/users", "ip", "192.168.1.1")
 func (al *AsyncLogger) Debugw(msg string, keysAndValues ...interface{}) {
 	fields := al.logger.parseKeysAndValues(keysAndValues...)
-	al.log(LevelDebug, 0, msg, fields...)
+	al.log(LevelDebug, 1, msg, fields...)
 }
 
 // Info logs a message at info level asynchronously.
@@ -178,7 +178,7 @@ func (al *AsyncLogger) Debugw(msg string, keysAndValues ...interface{}) {
 //	asyncLogger.Info("User created", "user_id", 12345, "email", "user@example.com")
 func (al *AsyncLogger) Info(args ...interface{}) {
 	msg, fields := al.logger.formatArgs(args...)
-	al.log(LevelInfo, 0, msg, fields...)
+	al.log(LevelInfo, 1, msg, fields...)
 }
 
 // Infof logs a formatted message at info level asynchronously using Printf-style formatting.
@@ -195,7 +195,7 @@ func (al *AsyncLogger) Info(args ...interface{}) {
 //	asyncLogger.Infof("User %s logged in with id %d", "john", 12345)
 func (al *AsyncLogger) Infof(template string, args ...interface{}) {
 	msg := fmt.Sprintf(template, args...)
-	al.log(LevelInfo, 0, msg)
+	al.log(LevelInfo, 1, msg)
 }
 
 // Infow logs a message with structured key-value pairs at info level asynchronously.
@@ -212,7 +212,7 @@ func (al *AsyncLogger) Infof(template string, args ...interface{}) {
 //	asyncLogger.Infow("User created", "user_id", 12345, "email", "user@example.com")
 func (al *AsyncLogger) Infow(msg string, keysAndValues ...interface{}) {
 	fields := al.logger.parseKeysAndValues(keysAndValues...)
-	al.log(LevelInfo, 0, msg, fields...)
+	al.log(LevelInfo, 1, msg, fields...)
 }
 
 // Warn logs a message at warning level asynchronously.
@@ -229,7 +229,7 @@ func (al *AsyncLogger) Infow(msg string, keysAndValues ...interface{}) {
 //	asyncLogger.Warn("Connection slow", "duration_ms", 1500, "host", "database.example.com")
 func (al *AsyncLogger) Warn(args ...interface{}) {
 	msg, fields := al.logger.formatArgs(args...)
-	al.log(LevelWarn, 0, msg, fields...)
+	al.log(LevelWarn, 1, msg, fields...)
 }
 
 // Warnf logs a formatted message at warning level asynchronously using Printf-style formatting.
@@ -246,7 +246,7 @@ func (al *AsyncLogger) Warn(args ...interface{}) {
 //	asyncLogger.Warnf("Connection attempt %d of %d failed", attempt, maxAttempts)
 func (al *AsyncLogger) Warnf(template string, args ...interface{}) {
 	msg := fmt.Sprintf(template, args...)
-	al.log(LevelWarn, 0, msg)
+	al.log(LevelWarn, 1, msg)
 }
 
 // Warnw logs a message with structured key-value pairs at warning level asynchronously.
@@ -263,7 +263,7 @@ func (al *AsyncLogger) Warnf(template string, args ...interface{}) {
 //	asyncLogger.Warnw("Slow query detected", "query", "SELECT * FROM users", "duration_ms", 1500)
 func (al *AsyncLogger) Warnw(msg string, keysAndValues ...interface{}) {
 	fields := al.logger.parseKeysAndValues(keysAndValues...)
-	al.log(LevelWarn, 0, msg, fields...)
+	al.log(LevelWarn, 1, msg, fields...)
 }
 
 // Error logs a message at error level asynchronously.
@@ -280,7 +280,7 @@ func (al *AsyncLogger) Warnw(msg string, keysAndValues ...interface{}) {
 //	asyncLogger.Error("Database error", "error", err.Error(), "operation", "fetch_user")
 func (al *AsyncLogger) Error(args ...interface{}) {
 	msg, fields := al.logger.formatArgs(args...)
-	al.log(LevelError, 0, msg, fields...)
+	al.log(LevelError, 1, msg, fields...)
 }
 
 // Errorf logs a formatted message at error level asynchronously using Printf-style formatting.
@@ -297,7 +297,7 @@ func (al *AsyncLogger) Error(args ...interface{}) {
 //	asyncLogger.Errorf("Failed to connect to %s on port %d", "database", 5432)
 func (al *AsyncLogger) Errorf(template string, args ...interface{}) {
 	msg := fmt.Sprintf(template, args...)
-	al.log(LevelError, 0, msg)
+	al.log(LevelError, 1, msg)
 }
 
 // Errorw logs a message with structured key-value pairs at error level asynchronously.
@@ -314,7 +314,7 @@ func (al *AsyncLogger) Errorf(template string, args ...interface{}) {
 //	asyncLogger.Errorw("Database connection failed", "error", err.Error(), "host", "localhost", "port", 5432)
 func (al *AsyncLogger) Errorw(msg string, keysAndValues ...interface{}) {
 	fields := al.logger.parseKeysAndValues(keysAndValues...)
-	al.log(LevelError, 0, msg, fields...)
+	al.log(LevelError, 1, msg, fields...)
 }
 
 // Fatal logs a message at error level and then exits the program with os.Exit(1).
