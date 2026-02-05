@@ -449,7 +449,7 @@ func (*Logger) parseKeysAndValues(keysAndValues ...interface{}) []Field {
 	}
 
 	estimatedCapacity := (len(keysAndValues) + 1) / 2
-	fields := make([]Field, 1, estimatedCapacity)
+	fields := make([]Field, 0, estimatedCapacity)
 	for i := 0; i < len(keysAndValues); i += 2 {
 		if i+1 < len(keysAndValues) {
 			key := fmt.Sprint(keysAndValues[i])
