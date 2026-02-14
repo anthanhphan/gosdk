@@ -64,5 +64,38 @@ func main() {
 	)
 	dbLog.Infow("Connection established", "pool_size", 10)
 
+	// Example 8: Sensitive data handling with struct tags
+	// Fields tagged with `log:"omit"` are excluded from log output.
+	// Fields tagged with `log:"mask"` are AES-encrypted (or show "***" if MaskKey is not set).
+	type LoginRequest struct {
+		Username string `json:"username"`
+		Password string `json:"password" log:"omit"`
+		Token    string `json:"token"    log:"mask"`
+		IP       string `json:"ip"`
+	}
+
+	req := LoginRequest{
+		Username: "john",
+		Password: "super-secret-password",
+		Token:    "bearer-eyJhbGciOiJIUzI1NiJ9",
+		IP:       "192.168.1.100",
+	}
+
+	// Without MaskKey: masked fields show "***"
+	logger.Infow("Login attempt (no mask key)", "request", req)
+
+	// Re-initialize with MaskKey to enable AES-GCM encryption for masked fields
+	undo() // release the previous logger
+	undoSensitive := logger.InitLogger(&logger.Config{
+		LogLevel:    logger.LevelDebug,
+		LogEncoding: logger.EncodingJSON,
+		MaskKey:     "0123456789abcdef", // 16 bytes = AES-128
+	})
+
+	logger.Infow("Login attempt (with mask key)", "request", req)
+	// Output: password is omitted, token is AES-GCM encrypted (base64 string)
+
+	undoSensitive()
+
 	logger.Info("Application shutdown complete")
 }

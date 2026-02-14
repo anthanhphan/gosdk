@@ -14,6 +14,7 @@ A high-performance, self-built structured logging package for Go applications. P
 - **Default fields** - Persistent fields added to all log messages
 - **Component loggers** - Create loggers with persistent context
 - **Secure file handling** - Directory traversal protection
+- **Sensitive data handling** - Struct tags for omitting or masking fields (`log:"omit"`, `log:"mask"`)
 
 ## Installation
 
@@ -71,6 +72,7 @@ type Config struct {
 	DisableStacktrace bool      // Hide stack traces
 	IsDevelopment     bool      // Development mode settings
 	Timezone          string    // Timezone for timestamps (IANA timezone name)
+	MaskKey           string    // AES key for encrypting masked fields (16/24/32 bytes)
 }
 ```
 
@@ -300,6 +302,49 @@ if err != nil {
 }
 ```
 
+### Sensitive Data Handling
+
+Use struct tags to control how struct fields appear in logs:
+
+- **`log:"omit"`** - Field is excluded from log output entirely
+- **`log:"mask"`** - Field value is masked (`"***"`) or AES-GCM encrypted if `MaskKey` is configured
+
+```go
+type LoginRequest struct {
+	Username string `json:"username"`
+	Password string `json:"password" log:"omit"`  // never logged
+	Token    string `json:"token"    log:"mask"`  // masked or encrypted
+	IP       string `json:"ip"`
+}
+
+// Without MaskKey: masked fields show "***"
+undo := logger.InitDefaultLogger()
+defer undo()
+
+logger.Infow("Login", "request", LoginRequest{
+	Username: "john",
+	Password: "secret",
+	Token:    "bearer-xyz",
+	IP:       "192.168.1.1",
+})
+// Output: {"request":{"username":"john","token":"***","ip":"192.168.1.1"}}
+// Note: password is completely absent, token shows "***"
+
+// With MaskKey: masked fields are AES-GCM encrypted (base64)
+undo2 := logger.InitLogger(&logger.Config{
+	LogLevel:    logger.LevelInfo,
+	LogEncoding: logger.EncodingJSON,
+	MaskKey:     "0123456789abcdef", // 16 bytes = AES-128
+})
+defer undo2()
+
+logger.Infow("Login", "request", req)
+// Output: {"request":{"username":"john","token":"sxgJA5vB...==","ip":"192.168.1.1"}}
+// Note: token is AES-GCM encrypted, can be decrypted with the same key
+```
+
+> **MaskKey requirements**: Must be exactly 16, 24, or 32 bytes for AES-128, AES-192, or AES-256 respectively. If invalid or empty, masked fields fall back to `"***"`.
+
 ### Fatal Logging
 
 Fatal methods log at error level and then exit the program with `os.Exit(1)`:
@@ -481,6 +526,8 @@ The logger package includes built-in security features:
 - **Directory traversal protection** - File paths are validated to prevent directory traversal attacks
 - **Secure file permissions** - Log files are created with `0600` permissions (read/write for owner only)
 - **Path validation** - All file paths are validated and resolved to absolute paths within the working directory
+- **Sensitive field omission** - Fields tagged with `log:"omit"` are never written to log output
+- **Sensitive field masking** - Fields tagged with `log:"mask"` are AES-GCM encrypted with a configurable key, or replaced with `"***"` when no key is set
 
 ## Performance
 

@@ -490,12 +490,12 @@ func (l *Logger) createEntry(level Level, skipOffset int, msg string, fields []F
 
 	l.mu.RLock()
 	for k, v := range l.fields {
-		entry.Fields[k] = v
+		entry.Fields[k] = processFieldValue(v, l.config.MaskKey)
 	}
 	l.mu.RUnlock()
 
 	for _, field := range fields {
-		entry.Fields[field.Key] = field.Value
+		entry.Fields[field.Key] = processFieldValue(field.Value, l.config.MaskKey)
 	}
 
 	if !l.config.DisableCaller {

@@ -35,6 +35,11 @@ type Config struct {
 	// Timezone specifies the timezone for timestamp formatting. If empty, uses UTC.
 	// Must be a valid IANA timezone name (e.g., "America/New_York", "Asia/Tokyo", "UTC").
 	Timezone string `yaml:"timezone" json:"timezone"`
+
+	// MaskKey is the secret key used for AES-GCM encryption of fields tagged with `log:"mask"`.
+	// Must be 16, 24, or 32 bytes for AES-128, AES-192, or AES-256 respectively.
+	// If empty, masked fields will display "***" instead of encrypted values.
+	MaskKey string `yaml:"mask_key" json:"mask_key"`
 }
 
 // Validate checks if the configuration is valid and all required fields are set.
