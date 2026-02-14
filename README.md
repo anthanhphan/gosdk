@@ -22,6 +22,7 @@ GoSDK provides essential packages that make Go development easier and faster:
 | **[orianna](./orianna)** | HTTP framework | Production-ready server with routing, middleware, validation |
 | **[jcodec](./jcodec)** | Fast JSON encoding/decoding | 5x faster than standard library |
 | **[logger](./logger)** | Structured logging | Zero-allocation, async support |
+| **[metrics](./metrics)** | Application metrics | Prometheus-backed counters, gauges, histograms |
 | **[goroutine](./goroutine)** | Safe concurrent code | Auto panic recovery |
 | **[conflux](./conflux)** | Config management | JSON/YAML with type safety |
 | **[utils](./utils)** | Common utilities | File I/O, environment helpers |
@@ -86,6 +87,9 @@ go run logger/docs/example/main.go
 
 # Try jcodec example
 go run jcodec/docs/example/main.go
+
+# Try metrics example
+go run metrics/docs/example/main.go
 
 # Try goroutine example
 go run goroutine/docs/example/main.go
@@ -154,6 +158,25 @@ logger.Infow("Structured log", "key", "value")
 
 ---
 
+### metrics - Application Metrics
+
+Prometheus-backed metrics collection with a simplified API.
+
+```go
+import "github.com/anthanhphan/gosdk/metrics"
+
+client := metrics.NewClient("myapp")
+
+client.Inc(ctx, "requests_total", "method", "GET", "status", "200")
+client.Duration(ctx, "request_duration", start, "endpoint", "/users")
+client.SetGauge(ctx, "active_connections", 42, "service", "api")
+http.Handle("/metrics", client.Handler())
+```
+
+[Full docs](./metrics/docs/README.md) | [Examples](./metrics/docs/example/main.go)
+
+---
+
 ### goroutine - Safe Concurrency
 
 Run goroutines without worrying about panics.
@@ -218,6 +241,7 @@ gosdk/
 │   ├── docs/        # Documentation
 │   └── *.go         # Source code
 ├── logger/          # Logger package
+├── metrics/         # Metrics package
 ├── goroutine/       # Goroutine package
 ├── conflux/         # Config package
 └── utils/           # Utilities
@@ -259,7 +283,7 @@ MIT License - see [LICENSE](./LICENSE)
 
 <div align="center">
 
-**Made with ❤️ by [anthanhphan](https://github.com/anthanhphan)**
+**Made by [anthanhphan](https://github.com/anthanhphan)**
 
 Star this repo if you find it helpful!
 
