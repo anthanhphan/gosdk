@@ -6,7 +6,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"math/rand/v2"
 	"net/http"
 	"time"
 
@@ -129,13 +128,13 @@ func exampleDuration(ctx context.Context) {
 
 	// Simulate measuring request duration
 	start := time.Now()
-	time.Sleep(time.Duration(rand.IntN(50)+10) * time.Millisecond) // simulate work
+	time.Sleep(50 * time.Millisecond) // simulate work
 	client.Duration(ctx, "request_duration_seconds", start, "endpoint", "/users", "method", "GET")
 	fmt.Printf("   - Recorded request duration: %v\n", time.Since(start).Round(time.Millisecond))
 
 	// Measure database query time
 	dbStart := time.Now()
-	time.Sleep(time.Duration(rand.IntN(20)+5) * time.Millisecond) // simulate query
+	time.Sleep(15 * time.Millisecond) // simulate query
 	client.Duration(ctx, "db_query_duration_seconds", dbStart, "query", "SELECT", "table", "users")
 	fmt.Printf("   - Recorded DB query duration: %v\n", time.Since(dbStart).Round(time.Millisecond))
 	fmt.Println()
@@ -198,7 +197,7 @@ func exampleNoop(ctx context.Context) {
 	fmt.Println("   - All metric operations silently discarded")
 
 	// Use as a default when metrics are optional
-	var metricsClient metrics.Client = metrics.NewNoopClient()
+	var metricsClient = metrics.NewNoopClient()
 	enableMetrics := false
 	if enableMetrics {
 		metricsClient = metrics.NewClient("myapp")
