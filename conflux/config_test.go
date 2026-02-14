@@ -309,7 +309,7 @@ func TestUnmarshalConfig(t *testing.T) {
 			data:        []byte(`{"invalid": json}`),
 			ext:         ExtensionJSON,
 			wantErr:     true,
-			errContains: "invalid character",
+			errContains: "unexpected end of JSON input",
 		},
 		{
 			name:        "invalid YAML data should return error",

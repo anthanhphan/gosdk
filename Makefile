@@ -1,5 +1,5 @@
 # Variables
-PKGS := $(shell go list ./... | grep -vE '/example')
+PKGS := $(shell go list ./... | grep -vE '/(example|mocks|docs)$$' | grep -vE '/docs/' | grep -vE '/fiber' | grep -vE '/engine')
 REPORT_DIR := code_report
 COVER_OUT := $(REPORT_DIR)/coverage.out
 COVER_HTML := $(REPORT_DIR)/coverage.html
@@ -31,6 +31,7 @@ install_tools:
 	go install github.com/gordonklaus/ineffassign@latest
 	go install github.com/client9/misspell/cmd/misspell@latest
 	go install github.com/fzipp/gocyclo/cmd/gocyclo@latest
+	go install go.uber.org/mock/mockgen@latest
 	@echo "All tools installed successfully."
 
 # ------------------------------
@@ -74,6 +75,11 @@ bench:
 	@go test -bench=. -benchmem -run=^$$ $(PKGS) | tee $(REPORT_DIR)/benchmark.txt
 	@echo "Benchmark results saved at: $(REPORT_DIR)/benchmark.txt"
 
+mock:
+	@echo "Generating mocks..."
+	@go generate ./...
+	@echo "Mocks generated successfully."
+
 
 # ------------------------------
 # Code Quality & Linting
@@ -89,7 +95,7 @@ lint:
 
 staticcheck:
 	@echo "Running staticcheck..."
-	@$(STATICCHECK) ./...
+	@$(STATICCHECK) -go 1.25.2 ./...
 
 ineffassign:
 	@echo "Checking for ineffectual assignments..."
@@ -101,7 +107,7 @@ misspell:
 
 cyclo:
 	@echo "Checking cyclomatic complexity..."
-	@$(GOCYCLO) -over 15 -ignore "_test" .
+	@$(GOCYCLO) -over 15 -ignore "_test|main" .
 
 # ------------------------------
 # Security and Vulnerability

@@ -19,13 +19,14 @@ GoSDK provides essential packages that make Go development easier and faster:
 
 | Package | What it does | Why use it |
 |---------|-------------|-----------|
+| **[orianna](./orianna)** | HTTP framework | Production-ready server with routing, middleware, validation |
 | **[jcodec](./jcodec)** | Fast JSON encoding/decoding | 5x faster than standard library |
 | **[logger](./logger)** | Structured logging | Zero-allocation, async support |
 | **[goroutine](./goroutine)** | Safe concurrent code | Auto panic recovery |
 | **[conflux](./conflux)** | Config management | JSON/YAML with type safety |
 | **[utils](./utils)** | Common utilities | File I/O, environment helpers |
 
-> **New to Go?** Each package has its own README with detailed guides and examples. Start with [logger](./logger/docs/README.md) or [jcodec](./jcodec/docs/README.md)!
+> **New to Go?** Each package has its own README with detailed guides and examples. Start with [orianna](./orianna/docs/README.md), [logger](./logger/docs/README.md), or [jcodec](./jcodec/docs/README.md)!
 
 ---
 
@@ -35,6 +36,7 @@ GoSDK provides essential packages that make Go development easier and faster:
 
 ```bash
 # Choose what you need
+go get github.com/anthanhphan/gosdk/orianna
 go get github.com/anthanhphan/gosdk/logger
 go get github.com/anthanhphan/gosdk/jcodec
 ```
@@ -76,6 +78,9 @@ Each package has runnable examples. Clone this repo and try:
 git clone https://github.com/anthanhphan/gosdk
 cd gosdk
 
+# Try orianna example
+go run orianna/docs/examples/complete/main.go
+
 # Try logger example
 go run logger/docs/example/main.go
 
@@ -89,6 +94,30 @@ go run goroutine/docs/example/main.go
 ---
 
 ## Packages
+
+### orianna - HTTP Framework
+
+Production-ready HTTP framework with routing, middleware, typed request binding, and more.
+
+```go
+import (
+    "github.com/anthanhphan/gosdk/orianna"
+    "github.com/anthanhphan/gosdk/orianna/pkg/configuration"
+)
+
+srv, _ := orianna.NewServer(&configuration.Config{
+    ServiceName: "my-api",
+    Port:        8080,
+})
+
+srv.GET("/users", listUsersHandler)
+srv.Protected().GET("/profile", profileHandler)
+srv.Run()
+```
+
+[Full docs](./orianna/docs/README.md) • [Examples](./orianna/docs/examples/complete/main.go)
+
+---
 
 ### jcodec - Fast JSON
 
@@ -182,6 +211,9 @@ make help
 **Project structure:**
 ```
 gosdk/
+├── orianna/         # HTTP framework package
+│   ├── docs/        # Documentation
+│   └── pkg/         # Sub-packages (core, server, routing, middleware, ...)
 ├── jcodec/          # JSON codec package
 │   ├── docs/        # Documentation
 │   └── *.go         # Source code

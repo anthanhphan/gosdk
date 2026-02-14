@@ -2,6 +2,8 @@
 
 package logger
 
+//go:generate mockgen -source=encoder.go -destination=mocks/mock_encoder.go -package=mocks
+
 import (
 	"fmt"
 	"strconv"

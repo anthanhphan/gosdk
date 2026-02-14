@@ -3,11 +3,11 @@
 package conflux
 
 import (
-	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"strings"
 
+	"github.com/anthanhphan/gosdk/jcodec"
 	"github.com/anthanhphan/gosdk/logger"
 	"github.com/anthanhphan/gosdk/utils"
 	"gopkg.in/yaml.v2"
@@ -128,7 +128,7 @@ func isValidExtension(ext string) bool {
 func unmarshalConfig[T any](data []byte, ext string, model *T) error {
 	switch ext {
 	case ExtensionJSON:
-		return json.Unmarshal(data, model)
+		return jcodec.Unmarshal(data, model)
 	case ExtensionYAML, ExtensionYML:
 		return yaml.Unmarshal(data, model)
 	default:
