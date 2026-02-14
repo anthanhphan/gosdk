@@ -414,7 +414,7 @@ func TestValidate_NilNestedPointer(t *testing.T) {
 	}
 	type User struct {
 		Name    string   `validate:"required"`
-		Address *Address // nil pointer → skip nested validation
+		Address *Address // nil pointer - skip nested validation
 	}
 
 	user := User{Name: "John", Address: nil}

@@ -158,7 +158,7 @@ func TestDuplicateRoute_NestedGroupDuplicate(t *testing.T) {
 		},
 	}
 
-	// This should succeed — different full paths
+	// This should succeed --different full paths
 	if err := rr.RegisterGroup(group); err != nil {
 		t.Fatalf("RegisterGroup() should succeed, got error = %v", err)
 	}

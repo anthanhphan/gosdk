@@ -160,7 +160,7 @@ func TestHealthManager_Check(t *testing.T) {
 		manager := server.NewHealthManager()
 		manager.Register(panicChecker)
 
-		// Should not panic — HealthManager has panic recovery
+		// Should not panic -- HealthManager has panic recovery
 		report := manager.Check(context.Background())
 
 		if report.Status != server.HealthStatusUnhealthy {

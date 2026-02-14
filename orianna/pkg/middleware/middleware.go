@@ -15,7 +15,7 @@ import (
 // The middleware are executed in the order they are provided.
 //
 // IMPORTANT: Middleware used inside Chain should NOT call ctx.Next() themselves.
-// Chain calls each middleware sequentially — if a middleware also calls
+// Chain calls each middleware sequentially -- if a middleware also calls
 // ctx.Next(), the Fiber handler index will advance twice, skipping handlers.
 // Middleware that needs to run code before AND after downstream handlers
 // should use the Before/After combinators instead of Chain.
@@ -169,7 +169,7 @@ var _ core.Context = (*timeoutContextWrapper)(nil)
 func (w *timeoutContextWrapper) Context() context.Context     { return w.timeoutCtx }
 func (w *timeoutContextWrapper) Status(code int) core.Context { w.inner.Status(code); return w }
 
-// Delegated methods — all 1:1 forwarded to inner context
+// Delegated methods -- all 1:1 forwarded to inner context
 func (w *timeoutContextWrapper) Next() error                       { return w.inner.Next() }
 func (w *timeoutContextWrapper) Method() string                    { return w.inner.Method() }
 func (w *timeoutContextWrapper) Path() string                      { return w.inner.Path() }

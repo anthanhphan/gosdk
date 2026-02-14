@@ -400,7 +400,7 @@ func validateRule(fieldName string, value reflect.Value, rule string) *Validatio
 		return handler(fieldName, value, ruleParam)
 	}
 
-	// Unknown rule name — likely a typo in the validate tag
+	// Unknown rule name -- likely a typo in the validate tag
 	return &ValidationError{
 		Field:   fieldName,
 		Message: fmt.Sprintf("unknown validation rule: %s", ruleName),

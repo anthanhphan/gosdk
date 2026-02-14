@@ -109,7 +109,7 @@ func createHooks() *orianna.RequestHooks {
 	hooks := orianna.NewRequestHooks()
 
 	hooks.AddOnRequest(func(ctx orianna.Context) {
-		logger.Debugw("→ REQUEST",
+		logger.Debugw("REQUEST",
 			"method", ctx.Method(),
 			"path", ctx.Path(),
 			"ip", ctx.IP(),
@@ -118,7 +118,7 @@ func createHooks() *orianna.RequestHooks {
 	})
 
 	hooks.AddOnResponse(func(ctx orianna.Context, status int, latency time.Duration) {
-		logger.Infow("← RESPONSE",
+		logger.Infow("RESPONSE",
 			"method", ctx.Method(),
 			"path", ctx.Path(),
 			"status", status,
@@ -127,7 +127,7 @@ func createHooks() *orianna.RequestHooks {
 	})
 
 	hooks.AddOnError(func(ctx orianna.Context, err error) {
-		logger.Errorw("✗ ERROR",
+		logger.Errorw("ERROR",
 			"path", ctx.Path(),
 			"error", err.Error(),
 		)

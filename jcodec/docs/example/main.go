@@ -148,7 +148,7 @@ func exampleRoundTrip() {
 
 	fmt.Printf("   Original:  %+v\n", original)
 	fmt.Printf("   RoundTrip: %+v\n", roundTrip)
-	fmt.Println("   ✓ Round-trip successful!")
+	fmt.Println("   - Round-trip successful!")
 	fmt.Println()
 }
 
