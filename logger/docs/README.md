@@ -1,20 +1,6 @@
 # Logger Package
 
-A high-performance, self-built structured logging package for Go applications. Provides fast, zero-allocation logging with JSON/Console output formats, configurable log levels, timezone support, and easy structured data integration. Built from scratch without external dependencies (except standard library).
-
-## Features
-
-- **Self-built implementation** - No external dependencies, built from scratch
-- **Structured logging** - JSON and Console output formats
-- **Configurable log levels** - Debug, Info, Warn, Error, Fatal
-- **Asynchronous logging** - Non-blocking logging with background worker
-- **Timezone support** - Configurable timezone for timestamps
-- **Caller information** - Automatic file and line number tracking
-- **Stack traces** - Automatic stack trace capture for errors
-- **Default fields** - Persistent fields added to all log messages
-- **Component loggers** - Create loggers with persistent context
-- **Secure file handling** - Directory traversal protection
-- **Sensitive data handling** - Struct tags for omitting or masking fields (`log:"omit"`, `log:"mask"`)
+A high-performance, zero-dependency structured logging package for Go. Built from scratch to match [zap](https://github.com/uber-go/zap)-level performance — **2.5M logs/sec**, **2 allocs/op**, **248 B/op**.
 
 ## Installation
 
@@ -27,521 +13,285 @@ go get github.com/anthanhphan/gosdk/logger
 ```go
 package main
 
-import (
-	"github.com/anthanhphan/gosdk/logger"
-)
+import "github.com/anthanhphan/gosdk/logger"
 
 func main() {
-	// Initialize logger with default config
-	undo := logger.InitDefaultLogger()
-	defer undo()
+    undo := logger.InitProductionLogger()
+    defer undo()
 
-	// Basic logging using convenience functions
-	logger.Info("Application started")
-	logger.Debug("Debug information")
-	logger.Warn("Warning message")
-	logger.Error("Error occurred")
-
-	// Formatted logging
-	logger.Infof("User %s logged in with id %d", "john", 12345)
-	logger.Debugf("Processing request for user %s", "john")
-
-	// Structured logging with key-value pairs
-	logger.Infow("User created", "user_id", 12345, "email", "user@example.com")
-	logger.Errorw("Request failed", "error", "connection timeout", "retry", 3)
-
-	// Create logger with persistent fields
-	serviceLog := logger.NewLoggerWithFields(
-		logger.String("service", "user-service"),
-		logger.String("version", "1.0.0"),
-	)
-	serviceLog.Infow("Service initialized", "port", 8080)
+    logger.Info("Application started")
+    logger.Infof("Listening on port %d", 8080)
+    logger.Infow("User created", "user_id", 12345, "email", "user@example.com")
 }
+```
+
+## Logging Styles
+
+### Simple
+
+```go
+logger.Info("User logged in")
+logger.Error("Connection failed")
+```
+
+### Printf-style
+
+```go
+logger.Infof("User %s logged in from %s", "john", "192.168.1.1")
+logger.Errorf("Failed after %d retries: %v", 3, err)
+```
+
+### Structured (Recommended)
+
+```go
+logger.Infow("Request completed",
+    "method",  "GET",
+    "path",    "/api/users",
+    "status",  200,
+    "latency", 3.14,
+)
+```
+
+### Typed Fields (Maximum Performance)
+
+```go
+log := logger.NewLoggerWithFields(
+    logger.String("service", "user-api"),
+)
+log.Info("request",
+    logger.String("method", "GET"),
+    logger.Int("status", 200),
+    logger.Float64("latency_ms", 3.14),
+    logger.Bool("cached", true),
+    logger.ErrorField(nil),
+)
 ```
 
 ## Configuration
 
-### Config Structure
-
 ```go
-type Config struct {
-	LogLevel          Level     // Log level: debug, info, warn, error
-	LogEncoding       Encoding  // Output format: json, console
-	OutputPaths    []string  // Output destinations (empty = console)
-	DisableCaller     bool      // Hide caller information
-	DisableStacktrace bool      // Hide stack traces
-	IsDevelopment     bool      // Development mode settings
-	Timezone          string    // Timezone for timestamps (IANA timezone name)
-	MaskKey           string    // AES key for encrypting masked fields (16/24/32 bytes)
-}
-```
-
-### Log Levels
-
-- **`LevelDebug`** - Debug messages (most verbose)
-- **`LevelInfo`** - Informational messages
-- **`LevelWarn`** - Warning messages
-- **`LevelError`** - Error messages
-- **`LevelFatal`** - Fatal messages (logs and exits with code 1)
-
-### Output Formats
-
-- **`EncodingJSON`** - Structured JSON output with ordered keys (ts and caller first)
-- **`EncodingConsole`** - Human-readable console output with color support in development mode
-
-### Output Destinations
-
-- **Empty array `[]string{}`** - Log to console (stdout)
-- **`"stdout"`** - Explicitly log to stdout
-- **`"stderr"`** - Log to stderr
-- **File paths `[]string{"log/app.log"}`** - Log to files (directory is created automatically)
-- **Multiple paths** - Log to multiple destinations simultaneously
-
-### Timezone Configuration
-
-The `Timezone` field accepts IANA timezone names (e.g., "Asia/Ho_Chi_Minh", "America/New_York", "UTC"). If empty or invalid, defaults to UTC.
-
-### Development Settings
-
-When `IsDevelopment: true`:
-
-- Console output includes ANSI color codes for log levels
-- More readable output format
-- Includes caller information by default
-- Optimized for development debugging
-
-## Usage Examples
-
-### Development Setup
-
-```go
-// Quick development setup with debug level logging
-undo := logger.InitDefaultLogger()
-defer undo()
-
-logger.Debug("Debug message")
-logger.Info("App started")
-```
-
-### Production Setup
-
-```go
-// Production-ready setup with info level logging and optimized settings
-undo := logger.InitProductionLogger()
-defer undo()
-
-logger.Info("Service started")
-logger.Infow("Service initialized", "port", 8080, "version", "1.0.0")
-```
-
-### Asynchronous Logging
-
-For high-performance applications, use asynchronous logging to avoid blocking:
-
-```go
-// Initialize async logger (non-blocking, uses background worker)
-undo := logger.InitAsyncLogger(&logger.Config{
-	LogLevel:    logger.LevelInfo,
-	LogEncoding: logger.EncodingJSON,
-	Timezone:    "Asia/Ho_Chi_Minh",
-	OutputPaths: []string{"log/app.log"},
-})
-defer undo() // Automatically flushes remaining entries
-
-// All logging operations are non-blocking
-logger.Info("Application started")
-logger.Infow("User created", "user_id", 12345)
-
-// Manually flush if needed before shutdown
-logger.Flush()
-```
-
-### Convenience Logging Functions
-
-The package provides global logging functions for quick and easy logging without creating logger instances:
-
-#### Simple Logging
-
-```go
-// Basic logging - automatically initializes with default config if needed
-logger.Debug("Debug message")
-logger.Info("Information message")
-logger.Warn("Warning message")
-logger.Error("Error message")
-logger.Fatal("Fatal error") // Logs and exits with code 1
-```
-
-#### Formatted Logging (Printf-style)
-
-```go
-// Formatted messages
-logger.Debugf("User %s logged in at %s", username, time.Now())
-logger.Infof("Processing %d items", count)
-logger.Warnf("Connection attempt %d of %d failed", attempt, maxAttempts)
-logger.Errorf("Failed to connect to %s: %v", host, err)
-logger.Fatalf("Fatal error: %s", err.Error()) // Logs and exits with code 1
-```
-
-#### Structured Logging (Key-Value pairs)
-
-```go
-// Structured logging with key-value pairs for better searchability
-logger.Debugw("Request received",
-	"method", "GET",
-	"path", "/api/users",
-	"ip", "192.168.1.1",
-)
-
-logger.Infow("User created",
-	"user_id", 12345,
-	"username", "john",
-	"email", "john@example.com",
-)
-
-logger.Warnw("Slow query detected",
-	"query", "SELECT * FROM users",
-	"duration_ms", 1500,
-)
-
-logger.Errorw("Database connection failed",
-	"error", err.Error(),
-	"host", "localhost",
-	"port", 5432,
-)
-```
-
-### Custom Configuration
-
-```go
-// Initialize with custom config
-config := &logger.Config{
-	LogLevel:          logger.LevelInfo,
-	LogEncoding:       logger.EncodingJSON,
-	OutputPaths:    []string{"log/app.log"},
-	DisableCaller:     false,
-	DisableStacktrace: true,
-	IsDevelopment:     false,
-	Timezone:          "Asia/Ho_Chi_Minh",
-}
-undo := logger.InitLogger(config)
-defer undo()
-
-// Use convenience functions
-logger.Info("Logger initialized")
-logger.Infow("Application ready", "version", "1.0.0")
-```
-
-### Logger with Default Fields
-
-```go
-// Initialize with default fields that will be added to all log messages
 undo := logger.InitLogger(&logger.Config{
-	LogLevel:    logger.LevelInfo,
-	LogEncoding: logger.EncodingJSON,
+    LogLevel:          logger.LevelInfo,       // debug | info | warn | error
+    LogEncoding:       logger.EncodingJSON,     // json | console
+    OutputPaths:       []string{"log/app.log"}, // stdout, stderr, or file paths
+    DisableCaller:     false,
+    DisableStacktrace: true,
+    IsDevelopment:     false,
+    Timezone:          "Asia/Ho_Chi_Minh",
+    MaskKey:           "0123456789abcdef",       // AES key for log:"mask" fields
 },
-	logger.String("app_name", "my-app"),
-	logger.String("app_version", "1.0.0"),
-	logger.String("environment", "production"),
+    logger.String("app", "my-service"),          // default fields on every log
+    logger.String("env", "production"),
 )
 defer undo()
-
-// All log messages will include the default fields
-logger.Info("User logged in") // Will include app_name, app_version, environment
 ```
 
-### Component-Specific Logging
-
-Create loggers with persistent fields for different components:
+### Preset Configs
 
 ```go
-// Initialize global logger first
-undo := logger.InitDefaultLogger()
-defer undo()
-
-// Authentication component logger
-authLog := logger.NewLoggerWithFields(
-	logger.String("component", "auth"),
-	logger.String("version", "2.1.0"),
-)
-authLog.Infow("User logged in", "user_id", "12345")
-
-// Database component logger
-dbLog := logger.NewLoggerWithFields(
-	logger.String("component", "database"),
-	logger.String("host", "localhost"),
-)
-dbLog.Infow("Connection established", "pool_size", 10)
-
-// Or use global convenience functions
-logger.Infow("Global event", "component", "main", "event", "startup")
+undo := logger.InitDevelopmentLogger()  // Debug, Console, color, caller, stacktrace
+undo := logger.InitProductionLogger()   // Info, JSON, caller, stacktrace
 ```
 
-### Error Handling
+### Async Logger
+
+Non-blocking — log entries are queued and written in a background goroutine:
 
 ```go
-// Using global convenience functions
-if err != nil {
-	logger.Errorw("Failed to process request",
-		"error", err.Error(),
-		"operation", "user_creation",
-		"request_id", "req-123",
-	)
-}
-
-// Using component-specific logger
-log := logger.NewLoggerWithFields(
-	logger.String("request_id", "req-123"),
-	logger.String("user_id", "user-456"),
-)
-
-if err != nil {
-	log.Errorw("Failed to process request",
-		"error", err.Error(),
-		"operation", "user_creation",
-	)
-}
-```
-
-### Sensitive Data Handling
-
-Use struct tags to control how struct fields appear in logs:
-
-- **`log:"omit"`** - Field is excluded from log output entirely
-- **`log:"mask"`** - Field value is masked (`"***"`) or AES-GCM encrypted if `MaskKey` is configured
-
-```go
-type LoginRequest struct {
-	Username string `json:"username"`
-	Password string `json:"password" log:"omit"`  // never logged
-	Token    string `json:"token"    log:"mask"`  // masked or encrypted
-	IP       string `json:"ip"`
-}
-
-// Without MaskKey: masked fields show "***"
-undo := logger.InitDefaultLogger()
-defer undo()
-
-logger.Infow("Login", "request", LoginRequest{
-	Username: "john",
-	Password: "secret",
-	Token:    "bearer-xyz",
-	IP:       "192.168.1.1",
+undo := logger.InitAsyncLogger(&logger.Config{
+    LogLevel:    logger.LevelInfo,
+    LogEncoding: logger.EncodingJSON,
 })
-// Output: {"request":{"username":"john","token":"***","ip":"192.168.1.1"}}
-// Note: password is completely absent, token shows "***"
-
-// With MaskKey: masked fields are AES-GCM encrypted (base64)
-undo2 := logger.InitLogger(&logger.Config{
-	LogLevel:    logger.LevelInfo,
-	LogEncoding: logger.EncodingJSON,
-	MaskKey:     "0123456789abcdef", // 16 bytes = AES-128
-})
-defer undo2()
-
-logger.Infow("Login", "request", req)
-// Output: {"request":{"username":"john","token":"sxgJA5vB...==","ip":"192.168.1.1"}}
-// Note: token is AES-GCM encrypted, can be decrypted with the same key
+defer undo() // flushes remaining entries on shutdown
 ```
 
-> **MaskKey requirements**: Must be exactly 16, 24, or 32 bytes for AES-128, AES-192, or AES-256 respectively. If invalid or empty, masked fields fall back to `"***"`.
-
-### Fatal Logging
-
-Fatal methods log at error level and then exit the program with `os.Exit(1)`:
-
-```go
-// Fatal logging - logs and exits
-if criticalError {
-	logger.Fatal("Critical error occurred")
-}
-
-// Fatal formatted logging
-if err != nil {
-	logger.Fatalf("Failed to start server: %v", err)
-}
-```
-
-## API Reference
-
-### Initialization Functions
-
-- **`InitLogger(config *Config, defaultLogFields ...Field) func()`** - Initialize synchronous logger with custom configuration and optional default fields
-- **`InitDefaultLogger() func()`** - Initialize with default configuration (debug level, development mode)
-- **`InitProductionLogger() func()`** - Initialize with production configuration (info level, optimized settings)
-- **`InitAsyncLogger(config *Config, defaultLogFields ...Field) func()`** - Initialize asynchronous logger with custom configuration (non-blocking, uses background worker)
-
-### Convenience Logging Functions
-
-All convenience functions auto-initialize the logger with default configuration if not already initialized. If async logger is initialized, these functions use async logging automatically.
-
-#### Simple Logging
-
-- **`Debug(args ...interface{})`** - Log debug message
-- **`Info(args ...interface{})`** - Log info message
-- **`Warn(args ...interface{})`** - Log warning message
-- **`Error(args ...interface{})`** - Log error message
-- **`Fatal(args ...interface{})`** - Log error message and exit with code 1
-
-#### Formatted Logging (Printf-style)
-
-- **`Debugf(template string, args ...interface{})`** - Log formatted debug message
-- **`Infof(template string, args ...interface{})`** - Log formatted info message
-- **`Warnf(template string, args ...interface{})`** - Log formatted warning message
-- **`Errorf(template string, args ...interface{})`** - Log formatted error message
-- **`Fatalf(template string, args ...interface{})`** - Log formatted error message and exit with code 1
-
-#### Structured Logging (Key-Value pairs)
-
-- **`Debugw(msg string, keysAndValues ...interface{})`** - Log debug with structured fields
-- **`Infow(msg string, keysAndValues ...interface{})`** - Log info with structured fields
-- **`Warnw(msg string, keysAndValues ...interface{})`** - Log warning with structured fields
-- **`Errorw(msg string, keysAndValues ...interface{})`** - Log error with structured fields
-
-### Utility Functions
-
-- **`Flush()`** - Flush all queued log entries (for async logger)
-- **`NewLoggerWithFields(fields ...Field) *Logger`** - Create a logger with persistent fields
-
-### Field Constructors
-
-- **`String(key, value string) Field`** - Create a string field
-- **`Int(key string, value int) Field`** - Create an integer field
-- **`Int64(key string, value int64) Field`** - Create an int64 field
-- **`Float64(key string, value float64) Field`** - Create a float64 field
-- **`Bool(key string, value bool) Field`** - Create a boolean field
-- **`ErrorField(err error) Field`** - Create an error field
-- **`Any(key string, value interface{}) Field`** - Create a field with any value type
-
-## Output Formats
-
-### JSON Output
-
-JSON output has ordered keys with `ts` and `caller` as the first keys:
-
-```json
-{
-  "ts": "2025-11-17T13:57:39+07:00",
-  "caller": "logger/docs/example/main.go:25",
-  "level": "info",
-  "msg": "User created",
-  "user_id": 12345,
-  "email": "user@example.com"
-}
-```
-
-### Console Output
-
-Console output is human-readable with optional color support:
-
-```
-2025-11-17T13:57:39+07:00	INFO	logger/docs/example/main.go:25	User created	{"user_id": 12345, "email": "user@example.com"}
-```
-
-In development mode, log levels are colorized:
-
-- Debug: Cyan
-- Info: Green
-- Warn: Yellow
-- Error: Red
-
-## Best Practices
-
-### 1. Use Structured Logging
-
-Prefer structured logging with key-value pairs over formatted strings for better searchability and analysis:
-
-```go
-// Good: Structured logging
-logger.Infow("User created", "user_id", 12345, "email", "user@example.com")
-
-// Less optimal: Formatted string
-logger.Infof("User created with id %d and email %s", 12345, "user@example.com")
-```
-
-### 2. Use Appropriate Log Levels
-
-- **Debug**: Detailed information for debugging purposes
-- **Info**: General informational messages about application progress
-- **Warn**: Warning messages for potentially harmful situations
-- **Error**: Error messages for error events
-- **Fatal**: Critical errors that require immediate program termination
-
-### 3. Initialize Once
-
-Initialize the logger once at application startup:
-
-```go
-func main() {
-	undo := logger.InitProductionLogger()
-	defer undo()
-
-	// Rest of your application
-}
-```
-
-### 4. Use Component-Specific Loggers
+## Component Loggers
 
 Create loggers with persistent fields for different components:
 
 ```go
 authLog := logger.NewLoggerWithFields(logger.String("component", "auth"))
+authLog.Infow("Login success", "user_id", "u-123")
+
 dbLog := logger.NewLoggerWithFields(logger.String("component", "database"))
+dbLog.Infow("Connection established", "pool_size", 10)
 ```
 
-### 5. Use Async Logger for High-Throughput Applications
+## Log Levels
 
-For applications with high logging volume, use async logger to avoid blocking:
+| Level | Constant | Exits? |
+|---|---|---|
+| Debug | `LevelDebug` | No |
+| Info | `LevelInfo` | No |
+| Warn | `LevelWarn` | No |
+| Error | `LevelError` | No |
+| Fatal | — | **Yes** (`os.Exit(1)`) |
 
-```go
-undo := logger.InitAsyncLogger(&logger.Config{
-	LogLevel:    logger.LevelInfo,
-	LogEncoding: logger.EncodingJSON,
-	OutputPaths: []string{"log/app.log"},
-})
-defer undo()
-```
+## Output Formats
 
-### 6. Configure Timezone for Timestamps
+### JSON (Ordered Keys)
 
-Set timezone for more readable timestamps in your local timezone:
+Keys always ordered: `ts` → `caller` → `level` → `msg` → `trace_id` → `request_id` → rest.
 
-```go
-config := &logger.Config{
-	LogLevel:    logger.LevelInfo,
-	LogEncoding: logger.EncodingJSON,
-	Timezone:    "Asia/Ho_Chi_Minh", // IANA timezone name
+```json
+{
+  "ts": "2025-11-17T13:57:39.123456+07:00",
+  "caller": "handler/user.go:42",
+  "level": "info",
+  "msg": "User created",
+  "trace_id": "abc123",
+  "request_id": "req-001",
+  "user_id": 12345
 }
 ```
 
-### 7. File Output Best Practices
+### Console (Colorized in Dev Mode)
 
-- Use relative paths like `"log/app.log"` (directory is created automatically)
-- The `log/` folder should be added to `.gitignore`
-- Multiple output paths are supported for redundancy
+```
+2025-11-17T13:57:39+07:00  INFO  handler/user.go:42  User created  user_id=12345
+```
+
+Colors: Debug=Cyan, Info=Green, Warn=Yellow, Error=Red.
+
+## Sensitive Data Handling
+
+```go
+type LoginRequest struct {
+    Username string `json:"username"`
+    Password string `json:"password" log:"omit"`  // never logged
+    Token    string `json:"token"    log:"mask"`  // masked or AES-encrypted
+}
+```
+
+| Tag | No MaskKey | With MaskKey |
+|---|---|---|
+| `log:"omit"` | Excluded | Excluded |
+| `log:"mask"` | `"***"` | AES-GCM encrypted (base64) |
+| _(none)_ | Normal | Normal |
+
+Nested structs processed recursively. MaskKey: 16/24/32 bytes (AES-128/192/256).
+
+## Flushing & Shutdown
+
+```go
+logger.Flush()      // flush all buffered output (async + buffer)
+myLogger.Sync()     // flush a specific logger instance
+```
+
+> Always call `Flush()` or the undo function before program exit.
 
 ## Security
 
-The logger package includes built-in security features:
-
-- **Directory traversal protection** - File paths are validated to prevent directory traversal attacks
-- **Secure file permissions** - Log files are created with `0600` permissions (read/write for owner only)
-- **Path validation** - All file paths are validated and resolved to absolute paths within the working directory
-- **Sensitive field omission** - Fields tagged with `log:"omit"` are never written to log output
-- **Sensitive field masking** - Fields tagged with `log:"mask"` are AES-GCM encrypted with a configurable key, or replaced with `"***"` when no key is set
-
-## Performance
-
-- **Zero-allocation logging** - Optimized for minimal memory allocations
-- **Asynchronous logging** - Non-blocking logging with configurable queue size (default: 100)
-- **Efficient encoding** - Fast JSON and Console encoding
-- **Concurrent-safe** - All operations are safe for concurrent use
+- **Directory traversal protection** — file paths validated before creation
+- **Secure file permissions** — `0600` (owner read/write only)
+- **`log:"omit"` fields** — never reach output at any encoding stage
+- **`log:"mask"` fields** — AES-GCM encrypted with configurable key
 
 ## Migration from Zap
 
-If you're migrating from zap, note these differences:
+| Zap | This Logger |
+|---|---|
+| `zap.String("k", "v")` | `logger.String("k", "v")` |
+| `zap.Int("k", 42)` | `logger.Int("k", 42)` |
+| `sugar.Infow(...)` | `logger.Infow(...)` |
+| `logger.Sync()` | `logger.Flush()` / `myLogger.Sync()` |
+| `zap.NewProduction()` | `logger.InitProductionLogger()` |
+| `zap.NewDevelopment()` | `logger.InitDevelopmentLogger()` |
 
-- Use `logger.String()` instead of `zap.String()`
-- Use `logger.Field` instead of `zap.Field`
-- No `SugaredLogger` - all methods are directly on `Logger`
-- Use `InitAsyncLogger()` for async logging instead of zap's async options
-- Field constructors are in the `logger` package, not `zap`
+---
+
+## Benchmark
+
+Measured on Apple Silicon, Go 1.25:
+
+```
+BenchmarkLogger_Infow_Baseline-8     1,550,000    798 ns/op    248 B/op    2 allocs/op
+BenchmarkLogger_Infow_ManyFields-8     840,000   1451 ns/op    888 B/op    9 allocs/op
+BenchmarkJSONEncoder_Encode-8        4,500,000    262 ns/op    288 B/op    1 allocs/op
+BenchmarkLogger_Parallel-8           3,350,000    392 ns/op    248 B/op    2 allocs/op
+```
+
+### vs Zap
+
+| Metric | zap.Sugar | This Logger |
+|---|---|---|
+| Latency | ~800-900 ns | **798 ns** |
+| Memory | ~200-300 B | **248 B** |
+| Allocs | 1 | 2 |
+
+> The +1 alloc is Go's `...any` variadic — a language-level cost.
+
+## Performance Techniques
+
+### Typed Field Union
+
+Fields use a discriminated union. Common types (string, int, bool, float64) are stored in dedicated slots — **zero `interface{}` boxing**:
+
+```go
+type Field struct {
+    Key     string
+    Type    FieldType  // String | Int64 | Bool | Float64 | Any
+    Integer int64      // int64, bool (0/1), float64 (math.Float64bits)
+    Str     string
+    Iface   any        // fallback for structs, maps, slices
+}
+```
+
+### Object Pooling (`sync.Pool`)
+
+Three pool layers for near-zero GC pressure:
+
+| Pool | Object | Pre-alloc |
+|---|---|---|
+| `entryPool` | `*Entry` | 16 fields |
+| `fieldSlicePool` | `*[]Field` | 8 fields |
+| `bufPool` | `*[]byte` | 1KB |
+
+### Buffered Async I/O
+
+```
+Log Call → bufio.Writer (256KB) → Goroutine (100ms flush) → os.Stdout/File
+              memcpy only            no syscall on hot path
+```
+
+I/O decoupled from request path. Individual `Write()` = in-memory buffer copy.
+
+### Caching
+
+| Cache | Type | Purpose |
+|---|---|---|
+| `callerCache` | `sync.Map` | `runtime.Caller` file → short path (skip `filepath.Rel`) |
+| `structMetaCache` | `sync.Map` | Struct tag metadata per `reflect.Type` (skip re-parsing) |
+
+### Manual JSON Encoding
+
+No `encoding/json`. Direct `append()` on pooled `[]byte`:
+- `appendJSONString` — RFC 8259 escaping, zero-alloc
+- `appendTypedFieldValue` — type-switch on `FieldType`
+- `time.AppendFormat` — avoids `time.Format()` string alloc
+- Single-pass priority field ordering (no sort, no nested loops)
+
+### Architecture
+
+```
+Application Code
+  └─ parseKeysAndValues (pooled []Field)
+      └─ createEntry (pooled *Entry, processField, setCallerInfo)
+          └─ Encoder (pooled []byte, typed append, single-pass priority)
+              └─ BufferedWriteSyncer (256KB bufio, 100ms flush goroutine)
+                  └─ os.Stdout / File
+```
+
+## API Reference
+
+### Field Constructors
+
+| Function | Type | Alloc |
+|---|---|---|
+| `String(k, v)` | `string` | **0** |
+| `Int(k, v)` | `int` | **0** |
+| `Int64(k, v)` | `int64` | **0** |
+| `Float64(k, v)` | `float64` | **0** |
+| `Bool(k, v)` | `bool` | **0** |
+| `ErrorField(err)` | `error` | **0** |
+| `Any(k, v)` | `any` | may alloc |

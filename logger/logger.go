@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"reflect"
 	"runtime"
 	"sync"
 	"time"
@@ -14,17 +13,35 @@ import (
 	"github.com/anthanhphan/gosdk/utils"
 )
 
+// stackBufPool reuses buffers for stack trace operations to reduce allocations.
+var stackBufPool = sync.Pool{
+	New: func() any {
+		buf := make([]byte, 4096)
+		return &buf
+	},
+}
+
+// fieldSlicePool pools []Field slices to avoid allocation in parseKeysAndValues.
+var fieldSlicePool = sync.Pool{
+	New: func() any {
+		s := make([]Field, 0, 8)
+		return &s
+	},
+}
+
+// callerCache caches runtime.Caller file paths → short paths to avoid
+// repeated filepath.Rel / GetShortPath calls on every log entry.
+var callerCache sync.Map // map[string]string
+
 // Logger is the core logger implementation.
 type Logger struct {
-	config         *Config
-	fields         map[string]interface{}
-	outputs        []io.Writer
-	closers        []io.Closer
-	mu             sync.RWMutex
-	callerSkip     int
-	jsonEncoder    *JSONEncoder
-	consoleEncoder *ConsoleEncoder
-	encoderMu      sync.RWMutex
+	config          *Config
+	processedFields []Field // pre-processed default fields stored as ordered slice
+	outputs         []WriteSyncer
+	closers         []io.Closer
+	mu              sync.RWMutex
+	callerSkip      int
+	encoder         Encoder
 }
 
 const (
@@ -63,25 +80,33 @@ func NewLogger(config *Config, outputs []io.Writer, fields ...Field) *Logger {
 		outputs = []io.Writer{os.Stdout}
 	}
 
-	fieldMap := make(map[string]interface{})
+	processed := make([]Field, 0, len(fields))
 	for _, field := range fields {
-		fieldMap[field.Key] = field.Value
+		processed = append(processed, processField(field, config.MaskKey))
 	}
 
-	l := &Logger{
-		config:  config,
-		fields:  fieldMap,
-		outputs: outputs,
+	// Wrap outputs as BufferedWriteSyncers for non-blocking I/O
+	wsOutputs := make([]WriteSyncer, 0, len(outputs))
+	for _, w := range outputs {
+		ws := AddSync(w)
+		bws := NewBufferedWriteSyncer(Lock(ws), 0, 0)
+		wsOutputs = append(wsOutputs, bws)
 	}
 
 	// Initialize encoder
+	var encoder Encoder
 	if config.LogEncoding == EncodingJSON {
-		l.jsonEncoder = newJSONEncoder(config)
+		encoder = newJSONEncoder(config)
 	} else {
-		l.consoleEncoder = newConsoleEncoder(config)
+		encoder = newConsoleEncoder(config)
 	}
 
-	return l
+	return &Logger{
+		config:          config,
+		processedFields: processed,
+		outputs:         wsOutputs,
+		encoder:         encoder,
+	}
 }
 
 func (l *Logger) setClosers(closers []io.Closer) {
@@ -111,22 +136,19 @@ func (l *Logger) With(fields ...Field) *Logger {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
 
-	newFields := make(map[string]interface{})
-	for k, v := range l.fields {
-		newFields[k] = v
-	}
+	newProcessed := make([]Field, len(l.processedFields), len(l.processedFields)+len(fields))
+	copy(newProcessed, l.processedFields)
 	for _, field := range fields {
-		newFields[field.Key] = field.Value
+		newProcessed = append(newProcessed, processField(field, l.config.MaskKey))
 	}
 
 	return &Logger{
-		config:         l.config,
-		fields:         newFields,
-		outputs:        l.outputs,
-		closers:        l.closers,
-		callerSkip:     l.callerSkip,
-		jsonEncoder:    l.jsonEncoder,
-		consoleEncoder: l.consoleEncoder,
+		config:          l.config,
+		processedFields: newProcessed,
+		outputs:         l.outputs,
+		closers:         l.closers,
+		callerSkip:      l.callerSkip,
+		encoder:         l.encoder,
 	}
 }
 
@@ -148,17 +170,16 @@ func (l *Logger) WithOptions(opts ...Option) *Logger {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
 
+	newProcessed := make([]Field, len(l.processedFields))
+	copy(newProcessed, l.processedFields)
+
 	newLogger := &Logger{
-		config:         l.config,
-		fields:         make(map[string]interface{}),
-		outputs:        l.outputs,
-		closers:        l.closers,
-		callerSkip:     l.callerSkip,
-		jsonEncoder:    l.jsonEncoder,
-		consoleEncoder: l.consoleEncoder,
-	}
-	for k, v := range l.fields {
-		newLogger.fields[k] = v
+		config:          l.config,
+		processedFields: newProcessed,
+		outputs:         l.outputs,
+		closers:         l.closers,
+		callerSkip:      l.callerSkip,
+		encoder:         l.encoder,
 	}
 
 	for _, opt := range opts {
@@ -180,7 +201,7 @@ func (l *Logger) WithOptions(opts ...Option) *Logger {
 //
 //	logger.Debug("Debug message")
 //	logger.Debug("Processing user", "user_id", 12345, "action", "create")
-func (l *Logger) Debug(args ...interface{}) {
+func (l *Logger) Debug(args ...any) {
 	msg, fields := l.formatArgs(args...)
 	l.log(LevelDebug, 1, msg, fields...)
 }
@@ -189,7 +210,7 @@ func (l *Logger) Debug(args ...interface{}) {
 //
 // Input:
 //   - template: Format string (Printf-style)
-//   - args: Arguments for the format string (variadic interface{})
+//   - args: Arguments for the format string (variadic any)
 //
 // Output:
 //   - None
@@ -197,7 +218,7 @@ func (l *Logger) Debug(args ...interface{}) {
 // Example:
 //
 //	logger.Debugf("Processing user %s with id %d", "john", 12345)
-func (l *Logger) Debugf(template string, args ...interface{}) {
+func (l *Logger) Debugf(template string, args ...any) {
 	msg := fmt.Sprintf(template, args...)
 	l.log(LevelDebug, 1, msg)
 }
@@ -206,7 +227,7 @@ func (l *Logger) Debugf(template string, args ...interface{}) {
 //
 // Input:
 //   - msg: Log message
-//   - keysAndValues: Alternating keys and values for structured logging (variadic interface{})
+//   - keysAndValues: Alternating keys and values for structured logging (variadic any)
 //
 // Output:
 //   - None
@@ -214,9 +235,14 @@ func (l *Logger) Debugf(template string, args ...interface{}) {
 // Example:
 //
 //	logger.Debugw("Request received", "method", "GET", "path", "/api/users", "ip", "192.168.1.1")
-func (l *Logger) Debugw(msg string, keysAndValues ...interface{}) {
-	fields := l.parseKeysAndValues(keysAndValues...)
-	l.log(LevelDebug, 1, msg, fields...)
+func (l *Logger) Debugw(msg string, keysAndValues ...any) {
+	fsp, n := l.parseKeysAndValues(keysAndValues...)
+	if fsp != nil {
+		l.log(LevelDebug, 1, msg, (*fsp)[:n]...)
+		fieldSlicePool.Put(fsp)
+	} else {
+		l.log(LevelDebug, 1, msg)
+	}
 }
 
 // Info logs a message at info level.
@@ -231,7 +257,7 @@ func (l *Logger) Debugw(msg string, keysAndValues ...interface{}) {
 //
 //	logger.Info("Application started")
 //	logger.Info("User created", "user_id", 12345, "email", "user@example.com")
-func (l *Logger) Info(args ...interface{}) {
+func (l *Logger) Info(args ...any) {
 	msg, fields := l.formatArgs(args...)
 	l.log(LevelInfo, 1, msg, fields...)
 }
@@ -240,7 +266,7 @@ func (l *Logger) Info(args ...interface{}) {
 //
 // Input:
 //   - template: Format string (Printf-style)
-//   - args: Arguments for the format string (variadic interface{})
+//   - args: Arguments for the format string (variadic any)
 //
 // Output:
 //   - None
@@ -248,7 +274,7 @@ func (l *Logger) Info(args ...interface{}) {
 // Example:
 //
 //	logger.Infof("User %s logged in with id %d", "john", 12345)
-func (l *Logger) Infof(template string, args ...interface{}) {
+func (l *Logger) Infof(template string, args ...any) {
 	msg := fmt.Sprintf(template, args...)
 	l.log(LevelInfo, 1, msg)
 }
@@ -257,7 +283,7 @@ func (l *Logger) Infof(template string, args ...interface{}) {
 //
 // Input:
 //   - msg: Log message
-//   - keysAndValues: Alternating keys and values for structured logging (variadic interface{})
+//   - keysAndValues: Alternating keys and values for structured logging (variadic any)
 //
 // Output:
 //   - None
@@ -265,11 +291,15 @@ func (l *Logger) Infof(template string, args ...interface{}) {
 // Example:
 //
 //	logger.Infow("User created", "user_id", 12345, "email", "user@example.com")
-func (l *Logger) Infow(msg string, keysAndValues ...interface{}) {
-	fields := l.parseKeysAndValues(keysAndValues...)
-	l.log(LevelInfo, 1, msg, fields...)
+func (l *Logger) Infow(msg string, keysAndValues ...any) {
+	fsp, n := l.parseKeysAndValues(keysAndValues...)
+	if fsp != nil {
+		l.log(LevelInfo, 1, msg, (*fsp)[:n]...)
+		fieldSlicePool.Put(fsp)
+	} else {
+		l.log(LevelInfo, 1, msg)
+	}
 }
-
 // Warn logs a message at warning level.
 //
 // Input:
@@ -282,7 +312,7 @@ func (l *Logger) Infow(msg string, keysAndValues ...interface{}) {
 //
 //	logger.Warn("Slow query detected")
 //	logger.Warn("Connection slow", "duration_ms", 1500, "host", "database.example.com")
-func (l *Logger) Warn(args ...interface{}) {
+func (l *Logger) Warn(args ...any) {
 	msg, fields := l.formatArgs(args...)
 	l.log(LevelWarn, 1, msg, fields...)
 }
@@ -291,7 +321,7 @@ func (l *Logger) Warn(args ...interface{}) {
 //
 // Input:
 //   - template: Format string (Printf-style)
-//   - args: Arguments for the format string (variadic interface{})
+//   - args: Arguments for the format string (variadic any)
 //
 // Output:
 //   - None
@@ -299,7 +329,7 @@ func (l *Logger) Warn(args ...interface{}) {
 // Example:
 //
 //	logger.Warnf("Connection attempt %d of %d failed", attempt, maxAttempts)
-func (l *Logger) Warnf(template string, args ...interface{}) {
+func (l *Logger) Warnf(template string, args ...any) {
 	msg := fmt.Sprintf(template, args...)
 	l.log(LevelWarn, 1, msg)
 }
@@ -308,7 +338,7 @@ func (l *Logger) Warnf(template string, args ...interface{}) {
 //
 // Input:
 //   - msg: Log message
-//   - keysAndValues: Alternating keys and values for structured logging (variadic interface{})
+//   - keysAndValues: Alternating keys and values for structured logging (variadic any)
 //
 // Output:
 //   - None
@@ -316,11 +346,15 @@ func (l *Logger) Warnf(template string, args ...interface{}) {
 // Example:
 //
 //	logger.Warnw("Slow query detected", "query", "SELECT * FROM users", "duration_ms", 1500)
-func (l *Logger) Warnw(msg string, keysAndValues ...interface{}) {
-	fields := l.parseKeysAndValues(keysAndValues...)
-	l.log(LevelWarn, 1, msg, fields...)
+func (l *Logger) Warnw(msg string, keysAndValues ...any) {
+	fsp, n := l.parseKeysAndValues(keysAndValues...)
+	if fsp != nil {
+		l.log(LevelWarn, 1, msg, (*fsp)[:n]...)
+		fieldSlicePool.Put(fsp)
+	} else {
+		l.log(LevelWarn, 1, msg)
+	}
 }
-
 // Error logs a message at error level.
 //
 // Input:
@@ -333,7 +367,7 @@ func (l *Logger) Warnw(msg string, keysAndValues ...interface{}) {
 //
 //	logger.Error("Operation failed")
 //	logger.Error("Database error", "error", err.Error(), "operation", "fetch_user")
-func (l *Logger) Error(args ...interface{}) {
+func (l *Logger) Error(args ...any) {
 	msg, fields := l.formatArgs(args...)
 	l.log(LevelError, 1, msg, fields...)
 }
@@ -342,7 +376,7 @@ func (l *Logger) Error(args ...interface{}) {
 //
 // Input:
 //   - template: Format string (Printf-style)
-//   - args: Arguments for the format string (variadic interface{})
+//   - args: Arguments for the format string (variadic any)
 //
 // Output:
 //   - None
@@ -350,7 +384,7 @@ func (l *Logger) Error(args ...interface{}) {
 // Example:
 //
 //	logger.Errorf("Failed to connect to %s on port %d", "database", 5432)
-func (l *Logger) Errorf(template string, args ...interface{}) {
+func (l *Logger) Errorf(template string, args ...any) {
 	msg := fmt.Sprintf(template, args...)
 	l.log(LevelError, 1, msg)
 }
@@ -359,7 +393,7 @@ func (l *Logger) Errorf(template string, args ...interface{}) {
 //
 // Input:
 //   - msg: Log message
-//   - keysAndValues: Alternating keys and values for structured logging (variadic interface{})
+//   - keysAndValues: Alternating keys and values for structured logging (variadic any)
 //
 // Output:
 //   - None
@@ -367,11 +401,15 @@ func (l *Logger) Errorf(template string, args ...interface{}) {
 // Example:
 //
 //	logger.Errorw("Database connection failed", "error", err.Error(), "host", "localhost", "port", 5432)
-func (l *Logger) Errorw(msg string, keysAndValues ...interface{}) {
-	fields := l.parseKeysAndValues(keysAndValues...)
-	l.log(LevelError, 1, msg, fields...)
+func (l *Logger) Errorw(msg string, keysAndValues ...any) {
+	fsp, n := l.parseKeysAndValues(keysAndValues...)
+	if fsp != nil {
+		l.log(LevelError, 1, msg, (*fsp)[:n]...)
+		fieldSlicePool.Put(fsp)
+	} else {
+		l.log(LevelError, 1, msg)
+	}
 }
-
 // Fatal logs a message at error level and then exits the program with os.Exit(1).
 //
 // Input:
@@ -384,7 +422,7 @@ func (l *Logger) Errorw(msg string, keysAndValues ...interface{}) {
 //
 //	logger.Fatal("Critical error occurred")
 //	logger.Fatal("Database connection failed", "error", err.Error())
-func (l *Logger) Fatal(args ...interface{}) {
+func (l *Logger) Fatal(args ...any) {
 	msg, fields := l.formatArgs(args...)
 	l.log(LevelError, 1, msg, fields...)
 	os.Exit(1)
@@ -394,7 +432,7 @@ func (l *Logger) Fatal(args ...interface{}) {
 //
 // Input:
 //   - template: Format string (Printf-style)
-//   - args: Arguments for the format string (variadic interface{})
+//   - args: Arguments for the format string (variadic any)
 //
 // Output:
 //   - None (exits program)
@@ -402,7 +440,7 @@ func (l *Logger) Fatal(args ...interface{}) {
 // Example:
 //
 //	logger.Fatalf("Failed to start server on port %d: %v", 8080, err)
-func (l *Logger) Fatalf(template string, args ...interface{}) {
+func (l *Logger) Fatalf(template string, args ...any) {
 	msg := fmt.Sprintf(template, args...)
 	l.log(LevelError, 1, msg)
 	os.Exit(1)
@@ -412,7 +450,7 @@ func (l *Logger) Fatalf(template string, args ...interface{}) {
 //
 // Input:
 //   - msg: Log message
-//   - keysAndValues: Alternating keys and values for structured logging (variadic interface{})
+//   - keysAndValues: Alternating keys and values for structured logging (variadic any)
 //
 // Output:
 //   - None (exits program)
@@ -420,13 +458,18 @@ func (l *Logger) Fatalf(template string, args ...interface{}) {
 // Example:
 //
 //	logger.Fatalw("Critical error", "error", err.Error(), "component", "database")
-func (l *Logger) Fatalw(msg string, keysAndValues ...interface{}) {
-	fields := l.parseKeysAndValues(keysAndValues...)
-	l.log(LevelError, 1, msg, fields...)
+func (l *Logger) Fatalw(msg string, keysAndValues ...any) {
+	fsp, n := l.parseKeysAndValues(keysAndValues...)
+	if fsp != nil {
+		l.log(LevelError, 1, msg, (*fsp)[:n]...)
+		fieldSlicePool.Put(fsp)
+	} else {
+		l.log(LevelError, 1, msg)
+	}
 	os.Exit(1)
 }
 
-func (l *Logger) formatArgs(args ...interface{}) (string, []Field) {
+func (l *Logger) formatArgs(args ...any) (string, []Field) {
 	if len(args) == 0 {
 		return "", nil
 	}
@@ -436,31 +479,46 @@ func (l *Logger) formatArgs(args ...interface{}) (string, []Field) {
 	}
 
 	if msg, ok := args[0].(string); ok {
-		fields := l.parseKeysAndValues(args[1:]...)
-		return msg, fields
+		fsp, n := l.parseKeysAndValues(args[1:]...)
+		if fsp != nil {
+			// Copy fields out since we need to return them and put the pool back
+			fields := make([]Field, n)
+			copy(fields, (*fsp)[:n])
+			fieldSlicePool.Put(fsp)
+			return msg, fields
+		}
+		return msg, nil
 	}
 
 	return fmt.Sprint(args...), nil
 }
 
-func (*Logger) parseKeysAndValues(keysAndValues ...interface{}) []Field {
+func (*Logger) parseKeysAndValues(keysAndValues ...any) (*[]Field, int) {
 	if len(keysAndValues) == 0 {
-		return nil
+		return nil, 0
 	}
 
-	estimatedCapacity := (len(keysAndValues) + 1) / 2
-	fields := make([]Field, 0, estimatedCapacity)
+	fsp := fieldSlicePool.Get().(*[]Field)
+	fields := (*fsp)[:0]
+
 	for i := 0; i < len(keysAndValues); i += 2 {
 		if i+1 < len(keysAndValues) {
-			key := fmt.Sprint(keysAndValues[i])
-			value := keysAndValues[i+1]
-			fields = append(fields, Any(key, value))
+			// Fast path: key is already a string (most common case)
+			var key string
+			if s, ok := keysAndValues[i].(string); ok {
+				key = s
+			} else {
+				key = fmt.Sprint(keysAndValues[i])
+			}
+			// Use Any() to detect typed fields and avoid boxing
+			fields = append(fields, Any(key, keysAndValues[i+1]))
 		} else {
 			fields = append(fields, Any("extra", keysAndValues[i]))
 		}
 	}
 
-	return fields
+	*fsp = fields
+	return fsp, len(fields)
 }
 
 func (l *Logger) log(level Level, skipOffset int, msg string, fields ...Field) {
@@ -476,30 +534,23 @@ func (l *Logger) createEntry(level Level, skipOffset int, msg string, fields []F
 		return nil
 	}
 
+	entry := getEntry()
+	entry.Time = time.Now()
+	entry.Level = level
+	entry.Message = msg
+
+	// Append pre-processed default fields (already processed at With/NewLogger time)
 	l.mu.RLock()
-	defaultFieldsCount := len(l.fields)
+	entry.Fields = append(entry.Fields, l.processedFields...)
 	l.mu.RUnlock()
 
-	fieldsCapacity := defaultFieldsCount + len(fields)
-	entry := &Entry{
-		Time:    time.Now(),
-		Level:   level,
-		Message: msg,
-		Fields:  make(map[string]interface{}, fieldsCapacity),
-	}
-
-	l.mu.RLock()
-	for k, v := range l.fields {
-		entry.Fields[k] = processFieldValue(v, l.config.MaskKey)
-	}
-	l.mu.RUnlock()
-
-	for _, field := range fields {
-		entry.Fields[field.Key] = processFieldValue(field.Value, l.config.MaskKey)
+	// Append per-call fields (processField handles struct tag omit/mask)
+	for i := range fields {
+		entry.Fields = append(entry.Fields, processField(fields[i], l.config.MaskKey))
 	}
 
 	if !l.config.DisableCaller {
-		entry.Caller = l.getCaller(skipOffset)
+		l.setCallerInfo(entry, skipOffset)
 	}
 
 	if !l.config.DisableStacktrace && level == LevelError {
@@ -521,94 +572,93 @@ func (l *Logger) shouldLog(level Level) bool {
 	return levelVal >= configLevelVal
 }
 
-func (l *Logger) getCaller(skipOffset int) *CallerInfo {
+func (l *Logger) setCallerInfo(entry *Entry, skipOffset int) {
 	skip := baseCallerSkip + l.callerSkip + skipOffset
 	_, file, line, ok := runtime.Caller(skip)
 	if !ok {
-		return nil
+		return
 	}
 
-	shortPath := utils.GetShortPath(file)
-
-	return &CallerInfo{
-		File: shortPath,
-		Line: line,
+	// Cache the short path to avoid filepath.Rel on every log
+	if cached, found := callerCache.Load(file); found {
+		entry.CallerFile = cached.(string)
+	} else {
+		short := utils.GetShortPath(file)
+		callerCache.Store(file, short)
+		entry.CallerFile = short
 	}
+	entry.CallerLine = line
+	entry.CallerDefined = true
 }
 
 func (*Logger) getStacktrace() string {
-	buf := make([]byte, 4096)
+	bufPtr := stackBufPool.Get().(*[]byte)
+	defer stackBufPool.Put(bufPtr)
+
+	buf := *bufPtr
 	n := runtime.Stack(buf, false)
 	return string(buf[:n])
 }
 
 func (l *Logger) writeEntry(entry *Entry) {
-	var encoder Encoder
-	if l.config.LogEncoding == EncodingJSON {
-		l.encoderMu.RLock()
-		jsonEncoder := l.jsonEncoder
-		l.encoderMu.RUnlock()
-
-		if jsonEncoder == nil {
-			l.encoderMu.Lock()
-			if l.jsonEncoder == nil {
-				l.jsonEncoder = newJSONEncoder(l.config)
-			}
-			jsonEncoder = l.jsonEncoder
-			l.encoderMu.Unlock()
-		}
-		encoder = jsonEncoder
-	} else {
-		l.encoderMu.RLock()
-		consoleEncoder := l.consoleEncoder
-		l.encoderMu.RUnlock()
-
-		if consoleEncoder == nil {
-			l.encoderMu.Lock()
-			if l.consoleEncoder == nil {
-				l.consoleEncoder = newConsoleEncoder(l.config)
-			}
-			consoleEncoder = l.consoleEncoder
-			l.encoderMu.Unlock()
-		}
-		encoder = consoleEncoder
-	}
-
-	output := encoder.Encode(entry)
-	if output == "" {
-		return
-	}
-
 	l.mu.RLock()
 	outputs := l.outputs
 	l.mu.RUnlock()
 
-	for _, w := range outputs {
-		_, _ = fmt.Fprint(w, output)
+	switch len(outputs) {
+	case 0:
+		// no outputs
+	case 1:
+		// Single output: zero-copy path
+		_, _ = l.encoder.EncodeTo(entry, outputs[0])
+	default:
+		// Multiple outputs: encode once, write bytes to all
+		encoded := l.encoder.Encode(entry)
+		b := []byte(encoded)
+		for _, ws := range outputs {
+			_, _ = ws.Write(b)
+		}
 	}
+
+	// Return entry to pool after all writes
+	putEntry(entry)
+}
+
+// Sync flushes all buffered output to the underlying writers.
+// This should be called when you need to ensure all logged data has been written,
+// for example during graceful shutdown or after critical error logs.
+func (l *Logger) Sync() {
+	l.flushOutputs()
 }
 
 func (l *Logger) flushOutputs() {
 	l.mu.RLock()
-	outputs := make([]io.Writer, len(l.outputs))
-	copy(outputs, l.outputs)
-	l.mu.RUnlock()
+	defer l.mu.RUnlock()
 
-	for _, w := range outputs {
-		// Use reflection to call Flush if available, to avoid static analysis
-		// linking this to x509 via generic interfaces.
-		v := reflect.ValueOf(w)
-		m := v.MethodByName("Flush")
-		if m.IsValid() && m.Type().NumIn() == 0 {
-			m.Call(nil)
-		}
-		if file, ok := w.(*os.File); ok {
-			_ = file.Sync()
+	for _, ws := range l.outputs {
+		_ = ws.Sync()
+	}
+}
+
+// stopOutputs stops all BufferedWriteSyncers (final flush + stop goroutine).
+// This should only be called during application shutdown.
+func (l *Logger) stopOutputs() {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+
+	for _, ws := range l.outputs {
+		if bws, ok := ws.(*BufferedWriteSyncer); ok {
+			_ = bws.Stop()
+		} else {
+			_ = ws.Sync()
 		}
 	}
 }
 
 func (l *Logger) closeOutputs() {
+	// Stop buffered writers first
+	l.stopOutputs()
+
 	l.mu.Lock()
 	closers := l.closers
 	l.closers = nil

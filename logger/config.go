@@ -5,6 +5,7 @@ package logger
 import (
 	"errors"
 	"io"
+	"log"
 	"os"
 	"strings"
 
@@ -102,6 +103,7 @@ func getOutputWriters(paths []string) ([]io.Writer, []io.Closer) {
 		default:
 			file, err := utils.OpenFileSecurely(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
 			if err != nil {
+				log.Printf("WARNING: failed to open log file %q: %v, falling back to stdout", path, err)
 				writers = append(writers, os.Stdout)
 			} else {
 				writers = append(writers, file)

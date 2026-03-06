@@ -87,7 +87,8 @@ func TestConsoleEncoder_GetTimezone(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			encoder := newConsoleEncoder(tt.config)
-			loc := encoder.getTimezone()
+			loc := resolveTimezone(tt.config.Timezone)
+			_ = encoder // ensure construction still works
 			tt.check(t, loc)
 		})
 	}
@@ -140,7 +141,8 @@ func TestJSONEncoder_GetTimezone(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			encoder := newJSONEncoder(tt.config)
-			loc := encoder.getTimezone()
+			loc := resolveTimezone(tt.config.Timezone)
+			_ = encoder // ensure construction still works
 			tt.check(t, loc)
 		})
 	}
@@ -165,7 +167,7 @@ func TestConsoleEncoder_Encode(t *testing.T) {
 				Time:    time.Now(),
 				Level:   LevelInfo,
 				Message: "test message",
-				Fields:  map[string]interface{}{},
+				Fields:  []Field{},
 			},
 			check: func(t *testing.T, output string) {
 				if !strings.Contains(output, "test message") {
@@ -185,14 +187,13 @@ func TestConsoleEncoder_Encode(t *testing.T) {
 				DisableCaller: false,
 			},
 			entry: &Entry{
-				Time:    time.Now(),
-				Level:   LevelInfo,
-				Message: "test message",
-				Caller: &CallerInfo{
-					File: "test.go",
-					Line: 42,
-				},
-				Fields: map[string]interface{}{},
+				Time:          time.Now(),
+				Level:         LevelInfo,
+				Message:       "test message",
+				CallerFile:    "test.go",
+				CallerLine:    42,
+				CallerDefined: true,
+				Fields:        []Field{},
 			},
 			check: func(t *testing.T, output string) {
 				if !strings.Contains(output, "test message") {
@@ -215,9 +216,9 @@ func TestConsoleEncoder_Encode(t *testing.T) {
 				Time:    time.Now(),
 				Level:   LevelInfo,
 				Message: "test message",
-				Fields: map[string]interface{}{
-					"key1": "value1",
-					"key2": 123,
+				Fields: []Field{
+					String("key1", "value1"),
+					Int("key2", 123),
 				},
 			},
 			check: func(t *testing.T, output string) {
@@ -242,7 +243,7 @@ func TestConsoleEncoder_Encode(t *testing.T) {
 				Level:      LevelError,
 				Message:    "test error",
 				Stacktrace: "stack trace here",
-				Fields:     map[string]interface{}{},
+				Fields:     []Field{},
 			},
 			check: func(t *testing.T, output string) {
 				if !strings.Contains(output, "test error") {
@@ -265,7 +266,7 @@ func TestConsoleEncoder_Encode(t *testing.T) {
 				Time:    time.Now(),
 				Level:   LevelInfo,
 				Message: "test message",
-				Fields:  map[string]interface{}{},
+				Fields:  []Field{},
 			},
 			check: func(t *testing.T, output string) {
 				// Check for ANSI color codes
@@ -358,7 +359,7 @@ func TestColorizeLevel(t *testing.T) {
 				Time:    time.Now(),
 				Level:   tt.level,
 				Message: "test",
-				Fields:  map[string]interface{}{},
+				Fields:  []Field{},
 			}
 			output := encoder.Encode(entry)
 			tt.check(t, output)

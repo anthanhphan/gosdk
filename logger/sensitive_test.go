@@ -329,6 +329,7 @@ func TestIntegration_LogStructWithTags(t *testing.T) {
 	}
 
 	logger.Infow("user login", "user", user)
+	logger.Sync()
 	output := buf.String()
 
 	if !strings.Contains(output, "John") {
@@ -361,6 +362,7 @@ func TestIntegration_LogStructWithTagsNoMaskKey(t *testing.T) {
 	}
 
 	logger.Infow("user action", "user", user)
+	logger.Sync()
 	output := buf.String()
 
 	if strings.Contains(output, "pass") {

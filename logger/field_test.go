@@ -4,6 +4,7 @@ package logger
 
 import (
 	"errors"
+	"math"
 	"testing"
 )
 
@@ -22,8 +23,11 @@ func TestInt64(t *testing.T) {
 				if field.Key != "count" {
 					t.Errorf("Int64() Key = %v, want %v", field.Key, "count")
 				}
-				if field.Value != int64(12345) {
-					t.Errorf("Int64() Value = %v, want %v", field.Value, int64(12345))
+				if field.Type != FieldTypeInt64 {
+					t.Errorf("Int64() Type = %v, want FieldTypeInt64", field.Type)
+				}
+				if field.Integer != 12345 {
+					t.Errorf("Int64() Integer = %v, want %v", field.Integer, int64(12345))
 				}
 			},
 		},
@@ -35,8 +39,8 @@ func TestInt64(t *testing.T) {
 				if field.Key != "balance" {
 					t.Errorf("Int64() Key = %v, want %v", field.Key, "balance")
 				}
-				if field.Value != int64(-100) {
-					t.Errorf("Int64() Value = %v, want %v", field.Value, int64(-100))
+				if field.Integer != -100 {
+					t.Errorf("Int64() Integer = %v, want %v", field.Integer, int64(-100))
 				}
 			},
 		},
@@ -48,8 +52,8 @@ func TestInt64(t *testing.T) {
 				if field.Key != "zero" {
 					t.Errorf("Int64() Key = %v, want %v", field.Key, "zero")
 				}
-				if field.Value != int64(0) {
-					t.Errorf("Int64() Value = %v, want %v", field.Value, int64(0))
+				if field.Integer != 0 {
+					t.Errorf("Int64() Integer = %v, want %v", field.Integer, int64(0))
 				}
 			},
 		},
@@ -78,8 +82,12 @@ func TestFloat64(t *testing.T) {
 				if field.Key != "price" {
 					t.Errorf("Float64() Key = %v, want %v", field.Key, "price")
 				}
-				if field.Value != 99.99 {
-					t.Errorf("Float64() Value = %v, want %v", field.Value, 99.99)
+				if field.Type != FieldTypeFloat64 {
+					t.Errorf("Float64() Type = %v, want FieldTypeFloat64", field.Type)
+				}
+				got := math.Float64frombits(uint64(field.Integer))
+				if got != 99.99 {
+					t.Errorf("Float64() decoded = %v, want %v", got, 99.99)
 				}
 			},
 		},
@@ -91,8 +99,9 @@ func TestFloat64(t *testing.T) {
 				if field.Key != "temperature" {
 					t.Errorf("Float64() Key = %v, want %v", field.Key, "temperature")
 				}
-				if field.Value != -273.15 {
-					t.Errorf("Float64() Value = %v, want %v", field.Value, -273.15)
+				got := math.Float64frombits(uint64(field.Integer))
+				if got != -273.15 {
+					t.Errorf("Float64() decoded = %v, want %v", got, -273.15)
 				}
 			},
 		},
@@ -104,8 +113,9 @@ func TestFloat64(t *testing.T) {
 				if field.Key != "zero" {
 					t.Errorf("Float64() Key = %v, want %v", field.Key, "zero")
 				}
-				if field.Value != 0.0 {
-					t.Errorf("Float64() Value = %v, want %v", field.Value, 0.0)
+				got := math.Float64frombits(uint64(field.Integer))
+				if got != 0.0 {
+					t.Errorf("Float64() decoded = %v, want %v", got, 0.0)
 				}
 			},
 		},
@@ -134,8 +144,11 @@ func TestBool(t *testing.T) {
 				if field.Key != "enabled" {
 					t.Errorf("Bool() Key = %v, want %v", field.Key, "enabled")
 				}
-				if field.Value != true {
-					t.Errorf("Bool() Value = %v, want %v", field.Value, true)
+				if field.Type != FieldTypeBool {
+					t.Errorf("Bool() Type = %v, want FieldTypeBool", field.Type)
+				}
+				if field.Integer != 1 {
+					t.Errorf("Bool() Integer = %v, want 1 (true)", field.Integer)
 				}
 			},
 		},
@@ -147,8 +160,8 @@ func TestBool(t *testing.T) {
 				if field.Key != "disabled" {
 					t.Errorf("Bool() Key = %v, want %v", field.Key, "disabled")
 				}
-				if field.Value != false {
-					t.Errorf("Bool() Value = %v, want %v", field.Value, false)
+				if field.Integer != 0 {
+					t.Errorf("Bool() Integer = %v, want 0 (false)", field.Integer)
 				}
 			},
 		},
@@ -169,26 +182,32 @@ func TestErrorField(t *testing.T) {
 		check func(t *testing.T, field Field)
 	}{
 		{
-			name: "non-nil error should create field with error message",
+			name: "non-nil error should create string field with error message",
 			err:  errors.New("test error"),
 			check: func(t *testing.T, field Field) {
 				if field.Key != "error" {
 					t.Errorf("ErrorField() Key = %v, want %v", field.Key, "error")
 				}
-				if field.Value != "test error" {
-					t.Errorf("ErrorField() Value = %v, want %v", field.Value, "test error")
+				if field.Type != FieldTypeString {
+					t.Errorf("ErrorField() Type = %v, want FieldTypeString", field.Type)
+				}
+				if field.Str != "test error" {
+					t.Errorf("ErrorField() Str = %v, want %v", field.Str, "test error")
 				}
 			},
 		},
 		{
-			name: "nil error should create field with nil value",
+			name: "nil error should create field with nil iface",
 			err:  nil,
 			check: func(t *testing.T, field Field) {
 				if field.Key != "error" {
 					t.Errorf("ErrorField() Key = %v, want %v", field.Key, "error")
 				}
-				if field.Value != nil {
-					t.Errorf("ErrorField() Value = %v, want %v", field.Value, nil)
+				if field.Type != FieldTypeAny {
+					t.Errorf("ErrorField() Type = %v, want FieldTypeAny", field.Type)
+				}
+				if field.Iface != nil {
+					t.Errorf("ErrorField() Iface = %v, want nil", field.Iface)
 				}
 			},
 		},

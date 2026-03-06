@@ -178,7 +178,7 @@ func TestLogger_writeEntry(t *testing.T) {
 				Time:    testTime,
 				Level:   LevelInfo,
 				Message: "test message",
-				Fields:  map[string]interface{}{},
+				Fields:  []Field{},
 			},
 			check: func(t *testing.T, output string) {
 				if !strings.Contains(output, "test message") {
@@ -192,7 +192,7 @@ func TestLogger_writeEntry(t *testing.T) {
 				Time:    testTime,
 				Level:   LevelInfo,
 				Message: "",
-				Fields:  map[string]interface{}{},
+				Fields:  []Field{},
 			},
 			check: func(t *testing.T, output string) {
 				// Empty message should still produce JSON output
@@ -207,7 +207,7 @@ func TestLogger_writeEntry(t *testing.T) {
 				Time:    testTime,
 				Level:   LevelInfo,
 				Message: "console test",
-				Fields:  map[string]interface{}{},
+				Fields:  []Field{},
 			},
 			check: func(t *testing.T, output string) {
 				if !strings.Contains(output, "console test") {
@@ -225,6 +225,7 @@ func TestLogger_writeEntry(t *testing.T) {
 				logger.config.LogEncoding = EncodingConsole
 			}
 			logger.writeEntry(tt.entry)
+			logger.Sync()
 			tt.check(t, buf.String())
 		})
 	}
@@ -304,36 +305,39 @@ func TestLogger_log(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			buf.Reset()
 			logger.log(tt.level, 0, tt.msg, tt.fields...)
+			logger.Sync()
 			tt.check(t, buf.String())
 		})
 	}
 }
 
-func TestLogger_getCaller(t *testing.T) {
+func TestLogger_setCallerInfo(t *testing.T) {
 	logger := NewLogger(&Config{
 		LogLevel:    LevelDebug,
 		LogEncoding: EncodingJSON,
 	}, []io.Writer{os.Stdout})
 
-	// Test that getCaller returns valid caller info
-	caller := logger.getCaller(0)
-	if caller == nil {
-		t.Error("getCaller() should not return nil")
+	// Test that setCallerInfo sets valid caller info
+	entry := &Entry{}
+	logger.setCallerInfo(entry, 0)
+	if !entry.CallerDefined {
+		t.Error("setCallerInfo() should set CallerDefined to true")
 		return
 	}
-	if caller.File == "" {
-		t.Error("getCaller() should return file path")
+	if entry.CallerFile == "" {
+		t.Error("setCallerInfo() should set CallerFile")
 	}
-	if caller.Line == 0 {
-		t.Error("getCaller() should return line number")
+	if entry.CallerLine == 0 {
+		t.Error("setCallerInfo() should set CallerLine")
 	}
 
 	// Test with increased callerSkip
 	logger.callerSkip = 100
-	caller = logger.getCaller(0)
-	// Should return nil if skip is too high
-	if caller != nil {
-		t.Logf("getCaller() with high skip returned: %v", caller)
+	entry2 := &Entry{}
+	logger.setCallerInfo(entry2, 0)
+	// Should not set CallerDefined if skip is too high
+	if entry2.CallerDefined {
+		t.Logf("setCallerInfo() with high skip set CallerDefined, file: %v", entry2.CallerFile)
 	}
 }
 

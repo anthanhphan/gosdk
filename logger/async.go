@@ -125,7 +125,7 @@ func (al *AsyncLogger) log(level Level, skipOffset int, msg string, fields ...Fi
 //
 //	asyncLogger.Debug("Debug message")
 //	asyncLogger.Debug("Processing user", "user_id", 12345, "action", "create")
-func (al *AsyncLogger) Debug(args ...interface{}) {
+func (al *AsyncLogger) Debug(args ...any) {
 	msg, fields := al.logger.formatArgs(args...)
 	al.log(LevelDebug, 1, msg, fields...)
 }
@@ -134,7 +134,7 @@ func (al *AsyncLogger) Debug(args ...interface{}) {
 //
 // Input:
 //   - template: Format string (Printf-style)
-//   - args: Arguments for the format string (variadic interface{})
+//   - args: Arguments for the format string (variadic any)
 //
 // Output:
 //   - None
@@ -142,7 +142,7 @@ func (al *AsyncLogger) Debug(args ...interface{}) {
 // Example:
 //
 //	asyncLogger.Debugf("Processing user %s with id %d", "john", 12345)
-func (al *AsyncLogger) Debugf(template string, args ...interface{}) {
+func (al *AsyncLogger) Debugf(template string, args ...any) {
 	msg := fmt.Sprintf(template, args...)
 	al.log(LevelDebug, 1, msg)
 }
@@ -151,7 +151,7 @@ func (al *AsyncLogger) Debugf(template string, args ...interface{}) {
 //
 // Input:
 //   - msg: Log message
-//   - keysAndValues: Alternating keys and values for structured logging (variadic interface{})
+//   - keysAndValues: Alternating keys and values for structured logging (variadic any)
 //
 // Output:
 //   - None
@@ -159,9 +159,14 @@ func (al *AsyncLogger) Debugf(template string, args ...interface{}) {
 // Example:
 //
 //	asyncLogger.Debugw("Request received", "method", "GET", "path", "/api/users", "ip", "192.168.1.1")
-func (al *AsyncLogger) Debugw(msg string, keysAndValues ...interface{}) {
-	fields := al.logger.parseKeysAndValues(keysAndValues...)
-	al.log(LevelDebug, 1, msg, fields...)
+func (al *AsyncLogger) Debugw(msg string, keysAndValues ...any) {
+	fsp, n := al.logger.parseKeysAndValues(keysAndValues...)
+	if fsp != nil {
+		al.log(LevelDebug, 1, msg, (*fsp)[:n]...)
+		fieldSlicePool.Put(fsp)
+	} else {
+		al.log(LevelDebug, 1, msg)
+	}
 }
 
 // Info logs a message at info level asynchronously.
@@ -176,7 +181,7 @@ func (al *AsyncLogger) Debugw(msg string, keysAndValues ...interface{}) {
 //
 //	asyncLogger.Info("Application started")
 //	asyncLogger.Info("User created", "user_id", 12345, "email", "user@example.com")
-func (al *AsyncLogger) Info(args ...interface{}) {
+func (al *AsyncLogger) Info(args ...any) {
 	msg, fields := al.logger.formatArgs(args...)
 	al.log(LevelInfo, 1, msg, fields...)
 }
@@ -185,7 +190,7 @@ func (al *AsyncLogger) Info(args ...interface{}) {
 //
 // Input:
 //   - template: Format string (Printf-style)
-//   - args: Arguments for the format string (variadic interface{})
+//   - args: Arguments for the format string (variadic any)
 //
 // Output:
 //   - None
@@ -193,7 +198,7 @@ func (al *AsyncLogger) Info(args ...interface{}) {
 // Example:
 //
 //	asyncLogger.Infof("User %s logged in with id %d", "john", 12345)
-func (al *AsyncLogger) Infof(template string, args ...interface{}) {
+func (al *AsyncLogger) Infof(template string, args ...any) {
 	msg := fmt.Sprintf(template, args...)
 	al.log(LevelInfo, 1, msg)
 }
@@ -202,7 +207,7 @@ func (al *AsyncLogger) Infof(template string, args ...interface{}) {
 //
 // Input:
 //   - msg: Log message
-//   - keysAndValues: Alternating keys and values for structured logging (variadic interface{})
+//   - keysAndValues: Alternating keys and values for structured logging (variadic any)
 //
 // Output:
 //   - None
@@ -210,9 +215,14 @@ func (al *AsyncLogger) Infof(template string, args ...interface{}) {
 // Example:
 //
 //	asyncLogger.Infow("User created", "user_id", 12345, "email", "user@example.com")
-func (al *AsyncLogger) Infow(msg string, keysAndValues ...interface{}) {
-	fields := al.logger.parseKeysAndValues(keysAndValues...)
-	al.log(LevelInfo, 1, msg, fields...)
+func (al *AsyncLogger) Infow(msg string, keysAndValues ...any) {
+	fsp, n := al.logger.parseKeysAndValues(keysAndValues...)
+	if fsp != nil {
+		al.log(LevelInfo, 1, msg, (*fsp)[:n]...)
+		fieldSlicePool.Put(fsp)
+	} else {
+		al.log(LevelInfo, 1, msg)
+	}
 }
 
 // Warn logs a message at warning level asynchronously.
@@ -227,7 +237,7 @@ func (al *AsyncLogger) Infow(msg string, keysAndValues ...interface{}) {
 //
 //	asyncLogger.Warn("Slow query detected")
 //	asyncLogger.Warn("Connection slow", "duration_ms", 1500, "host", "database.example.com")
-func (al *AsyncLogger) Warn(args ...interface{}) {
+func (al *AsyncLogger) Warn(args ...any) {
 	msg, fields := al.logger.formatArgs(args...)
 	al.log(LevelWarn, 1, msg, fields...)
 }
@@ -236,7 +246,7 @@ func (al *AsyncLogger) Warn(args ...interface{}) {
 //
 // Input:
 //   - template: Format string (Printf-style)
-//   - args: Arguments for the format string (variadic interface{})
+//   - args: Arguments for the format string (variadic any)
 //
 // Output:
 //   - None
@@ -244,7 +254,7 @@ func (al *AsyncLogger) Warn(args ...interface{}) {
 // Example:
 //
 //	asyncLogger.Warnf("Connection attempt %d of %d failed", attempt, maxAttempts)
-func (al *AsyncLogger) Warnf(template string, args ...interface{}) {
+func (al *AsyncLogger) Warnf(template string, args ...any) {
 	msg := fmt.Sprintf(template, args...)
 	al.log(LevelWarn, 1, msg)
 }
@@ -253,7 +263,7 @@ func (al *AsyncLogger) Warnf(template string, args ...interface{}) {
 //
 // Input:
 //   - msg: Log message
-//   - keysAndValues: Alternating keys and values for structured logging (variadic interface{})
+//   - keysAndValues: Alternating keys and values for structured logging (variadic any)
 //
 // Output:
 //   - None
@@ -261,9 +271,14 @@ func (al *AsyncLogger) Warnf(template string, args ...interface{}) {
 // Example:
 //
 //	asyncLogger.Warnw("Slow query detected", "query", "SELECT * FROM users", "duration_ms", 1500)
-func (al *AsyncLogger) Warnw(msg string, keysAndValues ...interface{}) {
-	fields := al.logger.parseKeysAndValues(keysAndValues...)
-	al.log(LevelWarn, 1, msg, fields...)
+func (al *AsyncLogger) Warnw(msg string, keysAndValues ...any) {
+	fsp, n := al.logger.parseKeysAndValues(keysAndValues...)
+	if fsp != nil {
+		al.log(LevelWarn, 1, msg, (*fsp)[:n]...)
+		fieldSlicePool.Put(fsp)
+	} else {
+		al.log(LevelWarn, 1, msg)
+	}
 }
 
 // Error logs a message at error level asynchronously.
@@ -278,7 +293,7 @@ func (al *AsyncLogger) Warnw(msg string, keysAndValues ...interface{}) {
 //
 //	asyncLogger.Error("Operation failed")
 //	asyncLogger.Error("Database error", "error", err.Error(), "operation", "fetch_user")
-func (al *AsyncLogger) Error(args ...interface{}) {
+func (al *AsyncLogger) Error(args ...any) {
 	msg, fields := al.logger.formatArgs(args...)
 	al.log(LevelError, 1, msg, fields...)
 }
@@ -287,7 +302,7 @@ func (al *AsyncLogger) Error(args ...interface{}) {
 //
 // Input:
 //   - template: Format string (Printf-style)
-//   - args: Arguments for the format string (variadic interface{})
+//   - args: Arguments for the format string (variadic any)
 //
 // Output:
 //   - None
@@ -295,7 +310,7 @@ func (al *AsyncLogger) Error(args ...interface{}) {
 // Example:
 //
 //	asyncLogger.Errorf("Failed to connect to %s on port %d", "database", 5432)
-func (al *AsyncLogger) Errorf(template string, args ...interface{}) {
+func (al *AsyncLogger) Errorf(template string, args ...any) {
 	msg := fmt.Sprintf(template, args...)
 	al.log(LevelError, 1, msg)
 }
@@ -304,7 +319,7 @@ func (al *AsyncLogger) Errorf(template string, args ...interface{}) {
 //
 // Input:
 //   - msg: Log message
-//   - keysAndValues: Alternating keys and values for structured logging (variadic interface{})
+//   - keysAndValues: Alternating keys and values for structured logging (variadic any)
 //
 // Output:
 //   - None
@@ -312,9 +327,14 @@ func (al *AsyncLogger) Errorf(template string, args ...interface{}) {
 // Example:
 //
 //	asyncLogger.Errorw("Database connection failed", "error", err.Error(), "host", "localhost", "port", 5432)
-func (al *AsyncLogger) Errorw(msg string, keysAndValues ...interface{}) {
-	fields := al.logger.parseKeysAndValues(keysAndValues...)
-	al.log(LevelError, 1, msg, fields...)
+func (al *AsyncLogger) Errorw(msg string, keysAndValues ...any) {
+	fsp, n := al.logger.parseKeysAndValues(keysAndValues...)
+	if fsp != nil {
+		al.log(LevelError, 1, msg, (*fsp)[:n]...)
+		fieldSlicePool.Put(fsp)
+	} else {
+		al.log(LevelError, 1, msg)
+	}
 }
 
 // Fatal logs a message at error level and then exits the program with os.Exit(1).
@@ -330,7 +350,7 @@ func (al *AsyncLogger) Errorw(msg string, keysAndValues ...interface{}) {
 //
 //	asyncLogger.Fatal("Critical error occurred")
 //	asyncLogger.Fatal("Database connection failed", "error", err.Error())
-func (al *AsyncLogger) Fatal(args ...interface{}) {
+func (al *AsyncLogger) Fatal(args ...any) {
 	msg, fields := al.logger.formatArgs(args...)
 	al.fatalWithSkip(0, msg, fields)
 }
@@ -340,7 +360,7 @@ func (al *AsyncLogger) Fatal(args ...interface{}) {
 //
 // Input:
 //   - template: Format string (Printf-style)
-//   - args: Arguments for the format string (variadic interface{})
+//   - args: Arguments for the format string (variadic any)
 //
 // Output:
 //   - None (exits program)
@@ -348,7 +368,7 @@ func (al *AsyncLogger) Fatal(args ...interface{}) {
 // Example:
 //
 //	asyncLogger.Fatalf("Failed to start server on port %d: %v", 8080, err)
-func (al *AsyncLogger) Fatalf(template string, args ...interface{}) {
+func (al *AsyncLogger) Fatalf(template string, args ...any) {
 	msg := fmt.Sprintf(template, args...)
 	al.fatalWithSkip(0, msg, nil)
 }
@@ -404,11 +424,7 @@ func (al *AsyncLogger) Flush() {
 		al.rt.cancel()
 	}
 	al.rt.wg.Wait()
-	select {
-	case <-al.rt.stopped:
-	default:
-		<-al.rt.stopped
-	}
+	<-al.rt.stopped
 	al.rt.writer.flushOutputs()
 }
 

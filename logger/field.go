@@ -2,131 +2,88 @@
 
 package logger
 
+import "math"
+
+// FieldType indicates how a Field's value is stored, allowing the encoder
+// to avoid interface{} type assertions and boxing overhead.
+type FieldType uint8
+
+const (
+	// FieldTypeAny is the default — value stored in Iface.
+	FieldTypeAny FieldType = iota
+	// FieldTypeString — value stored in Str.
+	FieldTypeString
+	// FieldTypeInt64 — value stored in Integer.
+	FieldTypeInt64
+	// FieldTypeBool — value stored in Integer (0=false, 1=true).
+	FieldTypeBool
+	// FieldTypeFloat64 — value stored in Integer (math.Float64bits).
+	FieldTypeFloat64
+)
+
 // Field represents a key-value pair for structured logging.
+// Uses a typed union (like zap) to avoid interface{} boxing for common types.
 type Field struct {
-	Key   string
-	Value interface{}
+	Key     string
+	Type    FieldType
+	Integer int64  // int64, bool (as 0/1), float64 (as bits)
+	Str     string // string value
+	Iface   any    // fallback for complex types
 }
 
-// String creates a Field with a string value.
-//
-// Input:
-//   - key: Field key name
-//   - val: String value for the field
-//
-// Output:
-//   - Field: A Field instance with the string value
-//
-// Example:
-//
-//	field := String("service", "user-service")
-//	logger.Infow("Request processed", field)
+// String creates a Field with a string value (zero-alloc).
 func String(key string, val string) Field {
-	return Field{Key: key, Value: val}
+	return Field{Key: key, Type: FieldTypeString, Str: val}
 }
 
-// Int creates a Field with an int value.
-//
-// Input:
-//   - key: Field key name
-//   - val: Integer value for the field
-//
-// Output:
-//   - Field: A Field instance with the int value
-//
-// Example:
-//
-//	field := Int("user_id", 12345)
-//	logger.Infow("User created", field)
+// Int creates a Field with an int value (zero-alloc).
 func Int(key string, val int) Field {
-	return Field{Key: key, Value: val}
+	return Field{Key: key, Type: FieldTypeInt64, Integer: int64(val)}
 }
 
-// Int64 creates a Field with an int64 value.
-//
-// Input:
-//   - key: Field key name
-//   - val: Int64 value for the field
-//
-// Output:
-//   - Field: A Field instance with the int64 value
-//
-// Example:
-//
-//	field := Int64("timestamp", time.Now().Unix())
-//	logger.Infow("Event occurred", field)
+// Int64 creates a Field with an int64 value (zero-alloc).
 func Int64(key string, val int64) Field {
-	return Field{Key: key, Value: val}
+	return Field{Key: key, Type: FieldTypeInt64, Integer: val}
 }
 
-// Float64 creates a Field with a float64 value.
-//
-// Input:
-//   - key: Field key name
-//   - val: Float64 value for the field
-//
-// Output:
-//   - Field: A Field instance with the float64 value
-//
-// Example:
-//
-//	field := Float64("duration_ms", 123.45)
-//	logger.Infow("Request completed", field)
+// Float64 creates a Field with a float64 value (zero-alloc via math.Float64bits).
 func Float64(key string, val float64) Field {
-	return Field{Key: key, Value: val}
+	return Field{Key: key, Type: FieldTypeFloat64, Integer: int64(math.Float64bits(val))}
 }
 
-// Bool creates a Field with a bool value.
-//
-// Input:
-//   - key: Field key name
-//   - val: Boolean value for the field
-//
-// Output:
-//   - Field: A Field instance with the bool value
-//
-// Example:
-//
-//	field := Bool("enabled", true)
-//	logger.Infow("Feature status", field)
+// Bool creates a Field with a bool value (zero-alloc).
 func Bool(key string, val bool) Field {
-	return Field{Key: key, Value: val}
+	var i int64
+	if val {
+		i = 1
+	}
+	return Field{Key: key, Type: FieldTypeBool, Integer: i}
 }
 
-// Any creates a Field with any value type.
-//
-// Input:
-//   - key: Field key name
-//   - val: Any value type for the field
-//
-// Output:
-//   - Field: A Field instance with the value
-//
-// Example:
-//
-//	field := Any("metadata", map[string]interface{}{"key": "value"})
-//	logger.Infow("Event logged", field)
-func Any(key string, val interface{}) Field {
-	return Field{Key: key, Value: val}
+// Any creates a Field with any value type (may allocate for boxing).
+func Any(key string, val any) Field {
+	// Try to detect common types and use typed fields to avoid boxing
+	switch v := val.(type) {
+	case string:
+		return String(key, v)
+	case int:
+		return Int(key, v)
+	case int64:
+		return Int64(key, v)
+	case float64:
+		return Float64(key, v)
+	case bool:
+		return Bool(key, v)
+	default:
+		return Field{Key: key, Type: FieldTypeAny, Iface: val}
+	}
 }
 
 // ErrorField creates a Field with an error value.
 // If the error is nil, the field value will be nil.
-//
-// Input:
-//   - err: Error value to convert to a field
-//
-// Output:
-//   - Field: A Field instance with key "error" and the error message as value
-//
-// Example:
-//
-//	if err != nil {
-//	    logger.Errorw("Operation failed", ErrorField(err))
-//	}
 func ErrorField(err error) Field {
 	if err == nil {
-		return Field{Key: "error", Value: nil}
+		return Field{Key: "error", Type: FieldTypeAny, Iface: nil}
 	}
-	return Field{Key: "error", Value: err.Error()}
+	return String("error", err.Error())
 }

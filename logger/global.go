@@ -178,7 +178,7 @@ func NewLoggerWithFields(fields ...Field) *Logger {
 // Automatically initializes with default configuration if logger is not initialized.
 //
 // Input:
-//   - args: Arguments to log (variadic interface{})
+//   - args: Arguments to log (variadic any)
 //
 // Output:
 //   - None
@@ -187,7 +187,7 @@ func NewLoggerWithFields(fields ...Field) *Logger {
 //
 //	logger.Debug("Processing request")
 //	logger.Debug("User", "john", "logged in")
-func Debug(args ...interface{}) {
+func Debug(args ...any) {
 	logGlobalArgs(LevelDebug, args...)
 }
 
@@ -196,7 +196,7 @@ func Debug(args ...interface{}) {
 //
 // Input:
 //   - template: Format string (Printf-style)
-//   - args: Arguments for the format string (variadic interface{})
+//   - args: Arguments for the format string (variadic any)
 //
 // Output:
 //   - None
@@ -204,7 +204,7 @@ func Debug(args ...interface{}) {
 // Example:
 //
 //	logger.Debugf("User %s logged in with id %d", "john", 12345)
-func Debugf(template string, args ...interface{}) {
+func Debugf(template string, args ...any) {
 	logGlobalFormatted(LevelDebug, template, args...)
 }
 
@@ -213,7 +213,7 @@ func Debugf(template string, args ...interface{}) {
 //
 // Input:
 //   - msg: Log message
-//   - keysAndValues: Alternating keys and values for structured logging (variadic interface{})
+//   - keysAndValues: Alternating keys and values for structured logging (variadic any)
 //
 // Output:
 //   - None
@@ -221,7 +221,7 @@ func Debugf(template string, args ...interface{}) {
 // Example:
 //
 //	logger.Debugw("Request received", "method", "GET", "path", "/api/users")
-func Debugw(msg string, keysAndValues ...interface{}) {
+func Debugw(msg string, keysAndValues ...any) {
 	logGlobalStructured(LevelDebug, msg, keysAndValues...)
 }
 
@@ -229,7 +229,7 @@ func Debugw(msg string, keysAndValues ...interface{}) {
 // Automatically initializes with default configuration if logger is not initialized.
 //
 // Input:
-//   - args: Arguments to log (variadic interface{})
+//   - args: Arguments to log (variadic any)
 //
 // Output:
 //   - None
@@ -238,7 +238,7 @@ func Debugw(msg string, keysAndValues ...interface{}) {
 //
 //	logger.Info("Application started")
 //	logger.Info("Service ready on port", 8080)
-func Info(args ...interface{}) {
+func Info(args ...any) {
 	logGlobalArgs(LevelInfo, args...)
 }
 
@@ -247,7 +247,7 @@ func Info(args ...interface{}) {
 //
 // Input:
 //   - template: Format string (Printf-style)
-//   - args: Arguments for the format string (variadic interface{})
+//   - args: Arguments for the format string (variadic any)
 //
 // Output:
 //   - None
@@ -255,7 +255,7 @@ func Info(args ...interface{}) {
 // Example:
 //
 //	logger.Infof("User %s created with id %d", "jane", 456)
-func Infof(template string, args ...interface{}) {
+func Infof(template string, args ...any) {
 	logGlobalFormatted(LevelInfo, template, args...)
 }
 
@@ -264,7 +264,7 @@ func Infof(template string, args ...interface{}) {
 //
 // Input:
 //   - msg: Log message
-//   - keysAndValues: Alternating keys and values for structured logging (variadic interface{})
+//   - keysAndValues: Alternating keys and values for structured logging (variadic any)
 //
 // Output:
 //   - None
@@ -272,7 +272,7 @@ func Infof(template string, args ...interface{}) {
 // Example:
 //
 //	logger.Infow("User created", "user_id", 12345, "email", "user@example.com")
-func Infow(msg string, keysAndValues ...interface{}) {
+func Infow(msg string, keysAndValues ...any) {
 	logGlobalStructured(LevelInfo, msg, keysAndValues...)
 }
 
@@ -280,7 +280,7 @@ func Infow(msg string, keysAndValues ...interface{}) {
 // Automatically initializes with default configuration if logger is not initialized.
 //
 // Input:
-//   - args: Arguments to log (variadic interface{})
+//   - args: Arguments to log (variadic any)
 //
 // Output:
 //   - None
@@ -289,7 +289,7 @@ func Infow(msg string, keysAndValues ...interface{}) {
 //
 //	logger.Warn("Connection timeout")
 //	logger.Warn("Retry attempt", 3, "of", 5)
-func Warn(args ...interface{}) {
+func Warn(args ...any) {
 	logGlobalArgs(LevelWarn, args...)
 }
 
@@ -298,7 +298,7 @@ func Warn(args ...interface{}) {
 //
 // Input:
 //   - template: Format string (Printf-style)
-//   - args: Arguments for the format string (variadic interface{})
+//   - args: Arguments for the format string (variadic any)
 //
 // Output:
 //   - None
@@ -306,7 +306,7 @@ func Warn(args ...interface{}) {
 // Example:
 //
 //	logger.Warnf("Connection to %s failed after %d retries", "localhost", 3)
-func Warnf(template string, args ...interface{}) {
+func Warnf(template string, args ...any) {
 	logGlobalFormatted(LevelWarn, template, args...)
 }
 
@@ -315,7 +315,7 @@ func Warnf(template string, args ...interface{}) {
 //
 // Input:
 //   - msg: Log message
-//   - keysAndValues: Alternating keys and values for structured logging (variadic interface{})
+//   - keysAndValues: Alternating keys and values for structured logging (variadic any)
 //
 // Output:
 //   - None
@@ -323,7 +323,7 @@ func Warnf(template string, args ...interface{}) {
 // Example:
 //
 //	logger.Warnw("Slow query detected", "query", "SELECT * FROM users", "duration_ms", 1500)
-func Warnw(msg string, keysAndValues ...interface{}) {
+func Warnw(msg string, keysAndValues ...any) {
 	logGlobalStructured(LevelWarn, msg, keysAndValues...)
 }
 
@@ -331,7 +331,7 @@ func Warnw(msg string, keysAndValues ...interface{}) {
 // Automatically initializes with default configuration if logger is not initialized.
 //
 // Input:
-//   - args: Arguments to log (variadic interface{})
+//   - args: Arguments to log (variadic any)
 //
 // Output:
 //   - None
@@ -340,7 +340,7 @@ func Warnw(msg string, keysAndValues ...interface{}) {
 //
 //	logger.Error("Database connection failed")
 //	logger.Error("Failed to process request:", err)
-func Error(args ...interface{}) {
+func Error(args ...any) {
 	logGlobalArgs(LevelError, args...)
 }
 
@@ -349,7 +349,7 @@ func Error(args ...interface{}) {
 //
 // Input:
 //   - template: Format string (Printf-style)
-//   - args: Arguments for the format string (variadic interface{})
+//   - args: Arguments for the format string (variadic any)
 //
 // Output:
 //   - None
@@ -357,7 +357,7 @@ func Error(args ...interface{}) {
 // Example:
 //
 //	logger.Errorf("Failed to connect to %s on port %d", "database", 5432)
-func Errorf(template string, args ...interface{}) {
+func Errorf(template string, args ...any) {
 	logGlobalFormatted(LevelError, template, args...)
 }
 
@@ -366,7 +366,7 @@ func Errorf(template string, args ...interface{}) {
 //
 // Input:
 //   - msg: Log message
-//   - keysAndValues: Alternating keys and values for structured logging (variadic interface{})
+//   - keysAndValues: Alternating keys and values for structured logging (variadic any)
 //
 // Output:
 //   - None
@@ -374,7 +374,7 @@ func Errorf(template string, args ...interface{}) {
 // Example:
 //
 //	logger.Errorw("Request failed", "error", err.Error(), "retry", 3)
-func Errorw(msg string, keysAndValues ...interface{}) {
+func Errorw(msg string, keysAndValues ...any) {
 	logGlobalStructured(LevelError, msg, keysAndValues...)
 }
 
@@ -382,7 +382,7 @@ func Errorw(msg string, keysAndValues ...interface{}) {
 // Automatically initializes with default configuration if logger is not initialized.
 //
 // Input:
-//   - args: Arguments to log (variadic interface{})
+//   - args: Arguments to log (variadic any)
 //
 // Output:
 //   - None (exits program)
@@ -391,7 +391,7 @@ func Errorw(msg string, keysAndValues ...interface{}) {
 //
 //	logger.Fatal("Critical error occurred")
 //	logger.Fatal("Database connection failed:", err)
-func Fatal(args ...interface{}) {
+func Fatal(args ...any) {
 	fatalGlobal(args...)
 }
 
@@ -400,7 +400,7 @@ func Fatal(args ...interface{}) {
 //
 // Input:
 //   - template: Format string (Printf-style)
-//   - args: Arguments for the format string (variadic interface{})
+//   - args: Arguments for the format string (variadic any)
 //
 // Output:
 //   - None (exits program)
@@ -408,7 +408,7 @@ func Fatal(args ...interface{}) {
 // Example:
 //
 //	logger.Fatalf("Failed to start server on port %d: %v", 8080, err)
-func Fatalf(template string, args ...interface{}) {
+func Fatalf(template string, args ...any) {
 	fatalGlobalf(template, args...)
 }
 
@@ -417,7 +417,7 @@ func Fatalf(template string, args ...interface{}) {
 //
 // Input:
 //   - msg: Log message
-//   - keysAndValues: Alternating keys and values for structured logging (variadic interface{})
+//   - keysAndValues: Alternating keys and values for structured logging (variadic any)
 //
 // Output:
 //   - None (exits program)
@@ -425,7 +425,7 @@ func Fatalf(template string, args ...interface{}) {
 // Example:
 //
 //	logger.Fatalw("Critical error", "error", err.Error(), "component", "database")
-func Fatalw(msg string, keysAndValues ...interface{}) {
+func Fatalw(msg string, keysAndValues ...any) {
 	fatalGlobalStructured(msg, keysAndValues...)
 }
 
@@ -457,7 +457,7 @@ func ensureGlobalLogger() *Logger {
 	return loggerInstance
 }
 
-func logGlobalArgs(level Level, args ...interface{}) {
+func logGlobalArgs(level Level, args ...any) {
 	if async := asyncLoggerInstance; async != nil {
 		msg, fields := async.logger.formatArgs(args...)
 		async.log(level, globalCallerSkip, msg, fields...)
@@ -468,7 +468,7 @@ func logGlobalArgs(level Level, args ...interface{}) {
 	logger.log(level, globalCallerSkip, msg, fields...)
 }
 
-func logGlobalFormatted(level Level, template string, args ...interface{}) {
+func logGlobalFormatted(level Level, template string, args ...any) {
 	msg := fmt.Sprintf(template, args...)
 	if async := asyncLoggerInstance; async != nil {
 		async.log(level, globalCallerSkip, msg)
@@ -477,18 +477,28 @@ func logGlobalFormatted(level Level, template string, args ...interface{}) {
 	ensureGlobalLogger().log(level, globalCallerSkip, msg)
 }
 
-func logGlobalStructured(level Level, msg string, keysAndValues ...interface{}) {
+func logGlobalStructured(level Level, msg string, keysAndValues ...any) {
 	if async := asyncLoggerInstance; async != nil {
-		fields := async.logger.parseKeysAndValues(keysAndValues...)
-		async.log(level, globalCallerSkip, msg, fields...)
+		fsp, n := async.logger.parseKeysAndValues(keysAndValues...)
+		if fsp != nil {
+			async.log(level, globalCallerSkip, msg, (*fsp)[:n]...)
+			fieldSlicePool.Put(fsp)
+		} else {
+			async.log(level, globalCallerSkip, msg)
+		}
 		return
 	}
 	logger := ensureGlobalLogger()
-	fields := logger.parseKeysAndValues(keysAndValues...)
-	logger.log(level, globalCallerSkip, msg, fields...)
+	fsp, n := logger.parseKeysAndValues(keysAndValues...)
+	if fsp != nil {
+		logger.log(level, globalCallerSkip, msg, (*fsp)[:n]...)
+		fieldSlicePool.Put(fsp)
+	} else {
+		logger.log(level, globalCallerSkip, msg)
+	}
 }
 
-func fatalGlobal(args ...interface{}) {
+func fatalGlobal(args ...any) {
 	if async := asyncLoggerInstance; async != nil {
 		msg, fields := async.logger.formatArgs(args...)
 		async.fatalWithSkip(globalCallerSkip, msg, fields)
@@ -501,7 +511,7 @@ func fatalGlobal(args ...interface{}) {
 	os.Exit(1)
 }
 
-func fatalGlobalf(template string, args ...interface{}) {
+func fatalGlobalf(template string, args ...any) {
 	if async := asyncLoggerInstance; async != nil {
 		msg := fmt.Sprintf(template, args...)
 		async.fatalWithSkip(globalCallerSkip, msg, nil)
@@ -514,15 +524,26 @@ func fatalGlobalf(template string, args ...interface{}) {
 	os.Exit(1)
 }
 
-func fatalGlobalStructured(msg string, keysAndValues ...interface{}) {
+func fatalGlobalStructured(msg string, keysAndValues ...any) {
 	if async := asyncLoggerInstance; async != nil {
-		fields := async.logger.parseKeysAndValues(keysAndValues...)
+		fsp, n := async.logger.parseKeysAndValues(keysAndValues...)
+		var fields []Field
+		if fsp != nil {
+			fields = make([]Field, n)
+			copy(fields, (*fsp)[:n])
+			fieldSlicePool.Put(fsp)
+		}
 		async.fatalWithSkip(globalCallerSkip, msg, fields)
 		return
 	}
 	logger := ensureGlobalLogger()
-	fields := logger.parseKeysAndValues(keysAndValues...)
-	logger.log(LevelError, globalCallerSkip, msg, fields...)
+	fsp, n := logger.parseKeysAndValues(keysAndValues...)
+	if fsp != nil {
+		logger.log(LevelError, globalCallerSkip, msg, (*fsp)[:n]...)
+		fieldSlicePool.Put(fsp)
+	} else {
+		logger.log(LevelError, globalCallerSkip, msg)
+	}
 	logger.flushOutputs()
 	os.Exit(1)
 }

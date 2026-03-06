@@ -20,6 +20,7 @@ func TestLogger_DirectMethods(t *testing.T) {
 	t.Run("Debug direct call", func(t *testing.T) {
 		buf.Reset()
 		logger.Debug("test debug")
+		logger.Sync()
 		if !strings.Contains(buf.String(), "test debug") {
 			t.Errorf("Expected debug log, got: %s", buf.String())
 		}
@@ -28,6 +29,7 @@ func TestLogger_DirectMethods(t *testing.T) {
 	t.Run("Debugf direct call", func(t *testing.T) {
 		buf.Reset()
 		logger.Debugf("test %s", "debugf")
+		logger.Sync()
 		if !strings.Contains(buf.String(), "test debugf") {
 			t.Errorf("Expected debugf log, got: %s", buf.String())
 		}
@@ -36,6 +38,7 @@ func TestLogger_DirectMethods(t *testing.T) {
 	t.Run("Debugw direct call", func(t *testing.T) {
 		buf.Reset()
 		logger.Debugw("test", "key", "debugw")
+		logger.Sync()
 		if !strings.Contains(buf.String(), "test") || !strings.Contains(buf.String(), "debugw") {
 			t.Errorf("Expected debugw log, got: %s", buf.String())
 		}
@@ -44,6 +47,7 @@ func TestLogger_DirectMethods(t *testing.T) {
 	t.Run("Info direct call", func(t *testing.T) {
 		buf.Reset()
 		logger.Info("test info")
+		logger.Sync()
 		if !strings.Contains(buf.String(), "test info") {
 			t.Errorf("Expected info log, got: %s", buf.String())
 		}
@@ -52,6 +56,7 @@ func TestLogger_DirectMethods(t *testing.T) {
 	t.Run("Infof direct call", func(t *testing.T) {
 		buf.Reset()
 		logger.Infof("test %s", "infof")
+		logger.Sync()
 		if !strings.Contains(buf.String(), "test infof") {
 			t.Errorf("Expected infof log, got: %s", buf.String())
 		}
@@ -60,6 +65,7 @@ func TestLogger_DirectMethods(t *testing.T) {
 	t.Run("Infow direct call", func(t *testing.T) {
 		buf.Reset()
 		logger.Infow("test", "key", "infow")
+		logger.Sync()
 		if !strings.Contains(buf.String(), "test") || !strings.Contains(buf.String(), "infow") {
 			t.Errorf("Expected infow log, got: %s", buf.String())
 		}
@@ -68,6 +74,7 @@ func TestLogger_DirectMethods(t *testing.T) {
 	t.Run("Warn direct call", func(t *testing.T) {
 		buf.Reset()
 		logger.Warn("test warn")
+		logger.Sync()
 		if !strings.Contains(buf.String(), "test warn") {
 			t.Errorf("Expected warn log, got: %s", buf.String())
 		}
@@ -76,6 +83,7 @@ func TestLogger_DirectMethods(t *testing.T) {
 	t.Run("Warnf direct call", func(t *testing.T) {
 		buf.Reset()
 		logger.Warnf("test %s", "warnf")
+		logger.Sync()
 		if !strings.Contains(buf.String(), "test warnf") {
 			t.Errorf("Expected warnf log, got: %s", buf.String())
 		}
@@ -84,6 +92,7 @@ func TestLogger_DirectMethods(t *testing.T) {
 	t.Run("Warnw direct call", func(t *testing.T) {
 		buf.Reset()
 		logger.Warnw("test", "key", "warnw")
+		logger.Sync()
 		if !strings.Contains(buf.String(), "test") || !strings.Contains(buf.String(), "warnw") {
 			t.Errorf("Expected warnw log, got: %s", buf.String())
 		}
@@ -92,6 +101,7 @@ func TestLogger_DirectMethods(t *testing.T) {
 	t.Run("Error direct call", func(t *testing.T) {
 		buf.Reset()
 		logger.Error("test error")
+		logger.Sync()
 		if !strings.Contains(buf.String(), "test error") {
 			t.Errorf("Expected error log, got: %s", buf.String())
 		}
@@ -100,6 +110,7 @@ func TestLogger_DirectMethods(t *testing.T) {
 	t.Run("Errorf direct call", func(t *testing.T) {
 		buf.Reset()
 		logger.Errorf("test %s", "errorf")
+		logger.Sync()
 		if !strings.Contains(buf.String(), "test errorf") {
 			t.Errorf("Expected errorf log, got: %s", buf.String())
 		}
@@ -108,6 +119,7 @@ func TestLogger_DirectMethods(t *testing.T) {
 	t.Run("Errorw direct call", func(t *testing.T) {
 		buf.Reset()
 		logger.Errorw("test", "key", "errorw")
+		logger.Sync()
 		if !strings.Contains(buf.String(), "test") || !strings.Contains(buf.String(), "errorw") {
 			t.Errorf("Expected errorw log, got: %s", buf.String())
 		}
