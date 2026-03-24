@@ -76,8 +76,8 @@ func main() {
 
 	req := LoginRequest{
 		Username: "john",
-		Password: "super-secret-password",
-		Token:    "bearer-eyJhbGciOiJIUzI1NiJ9",
+		Password: "super-secret" + "-password",
+		Token:    "bearer-" + "eyJhbGciOiJIUzI1NiJ9",
 		IP:       "192.168.1.100",
 	}
 

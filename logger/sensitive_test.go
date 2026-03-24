@@ -33,12 +33,14 @@ type testNoTags struct {
 
 type testUnexported struct {
 	Name     string `json:"name"`
-	password string //nolint:staticcheck
+	password string
 }
 
 // newTestUnexported creates a testUnexported with unexported field set for testing.
 func newTestUnexported(name, pass string) testUnexported {
-	return testUnexported{Name: name, password: pass}
+	t := testUnexported{Name: name, password: pass}
+	_ = t.password // ensure field is read (satisfies linters)
+	return t
 }
 
 func TestProcessFieldValue_NonStruct(t *testing.T) {

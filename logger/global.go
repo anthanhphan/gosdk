@@ -482,7 +482,7 @@ func logGlobalStructured(level Level, msg string, keysAndValues ...any) {
 		fsp, n := async.logger.parseKeysAndValues(keysAndValues...)
 		if fsp != nil {
 			async.log(level, globalCallerSkip, msg, (*fsp)[:n]...)
-			fieldSlicePool.Put(fsp)
+			putFieldSlice(fsp)
 		} else {
 			async.log(level, globalCallerSkip, msg)
 		}
@@ -492,7 +492,7 @@ func logGlobalStructured(level Level, msg string, keysAndValues ...any) {
 	fsp, n := logger.parseKeysAndValues(keysAndValues...)
 	if fsp != nil {
 		logger.log(level, globalCallerSkip, msg, (*fsp)[:n]...)
-		fieldSlicePool.Put(fsp)
+		putFieldSlice(fsp)
 	} else {
 		logger.log(level, globalCallerSkip, msg)
 	}
@@ -531,7 +531,7 @@ func fatalGlobalStructured(msg string, keysAndValues ...any) {
 		if fsp != nil {
 			fields = make([]Field, n)
 			copy(fields, (*fsp)[:n])
-			fieldSlicePool.Put(fsp)
+			putFieldSlice(fsp)
 		}
 		async.fatalWithSkip(globalCallerSkip, msg, fields)
 		return
@@ -540,7 +540,7 @@ func fatalGlobalStructured(msg string, keysAndValues ...any) {
 	fsp, n := logger.parseKeysAndValues(keysAndValues...)
 	if fsp != nil {
 		logger.log(LevelError, globalCallerSkip, msg, (*fsp)[:n]...)
-		fieldSlicePool.Put(fsp)
+		putFieldSlice(fsp)
 	} else {
 		logger.log(LevelError, globalCallerSkip, msg)
 	}

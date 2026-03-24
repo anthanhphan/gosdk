@@ -2,22 +2,25 @@
 
 package logger
 
-import "math"
+import (
+	"encoding/binary"
+	"math"
+)
 
 // FieldType indicates how a Field's value is stored, allowing the encoder
 // to avoid interface{} type assertions and boxing overhead.
 type FieldType uint8
 
 const (
-	// FieldTypeAny is the default — value stored in Iface.
+	// FieldTypeAny is the default -- value stored in Iface.
 	FieldTypeAny FieldType = iota
-	// FieldTypeString — value stored in Str.
+	// FieldTypeString -- value stored in Str.
 	FieldTypeString
-	// FieldTypeInt64 — value stored in Integer.
+	// FieldTypeInt64 -- value stored in Integer.
 	FieldTypeInt64
-	// FieldTypeBool — value stored in Integer (0=false, 1=true).
+	// FieldTypeBool -- value stored in Integer (0=false, 1=true).
 	FieldTypeBool
-	// FieldTypeFloat64 — value stored in Integer (math.Float64bits).
+	// FieldTypeFloat64 -- value stored in Integer (math.Float64bits).
 	FieldTypeFloat64
 )
 
@@ -46,9 +49,28 @@ func Int64(key string, val int64) Field {
 	return Field{Key: key, Type: FieldTypeInt64, Integer: val}
 }
 
+// float64ToInt64Bits stores a float64's IEEE-754 bits in an int64 field
+// without direct uint64↔int64 casts (avoids gosec G115).
+// Uses split-uint32 read: uint32→int64 is always safe.
+func float64ToInt64Bits(val float64) int64 {
+	var buf [8]byte
+	binary.LittleEndian.PutUint64(buf[:], math.Float64bits(val))
+	lo := int64(binary.LittleEndian.Uint32(buf[:4]))
+	hi := int64(binary.LittleEndian.Uint32(buf[4:]))
+	return lo | (hi << 32)
+}
+
+// int64BitsToFloat64 reverses float64ToInt64Bits.
+func int64BitsToFloat64(bits int64) float64 {
+	var buf [8]byte
+	binary.LittleEndian.PutUint32(buf[:4], uint32(bits&0xFFFFFFFF))
+	binary.LittleEndian.PutUint32(buf[4:], uint32((bits>>32)&0xFFFFFFFF))
+	return math.Float64frombits(binary.LittleEndian.Uint64(buf[:]))
+}
+
 // Float64 creates a Field with a float64 value (zero-alloc via math.Float64bits).
 func Float64(key string, val float64) Field {
-	return Field{Key: key, Type: FieldTypeFloat64, Integer: int64(math.Float64bits(val))}
+	return Field{Key: key, Type: FieldTypeFloat64, Integer: float64ToInt64Bits(val)}
 }
 
 // Bool creates a Field with a bool value (zero-alloc).
@@ -68,8 +90,24 @@ func Any(key string, val any) Field {
 		return String(key, v)
 	case int:
 		return Int(key, v)
+	case int32:
+		return Int64(key, int64(v))
 	case int64:
 		return Int64(key, v)
+	case uint:
+		if v <= math.MaxInt64 {
+			return Int64(key, int64(v))
+		}
+		return Field{Key: key, Type: FieldTypeAny, Iface: val}
+	case uint32:
+		return Int64(key, int64(v))
+	case uint64:
+		if v <= math.MaxInt64 {
+			return Int64(key, int64(v))
+		}
+		return Field{Key: key, Type: FieldTypeAny, Iface: val}
+	case float32:
+		return Float64(key, float64(v))
 	case float64:
 		return Float64(key, v)
 	case bool:

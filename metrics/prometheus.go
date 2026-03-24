@@ -17,6 +17,9 @@ import (
 // Prometheus Client
 // ============================================================================
 
+// Compile-time interface compliance check.
+var _ Client = (*prometheusClient)(nil)
+
 // prometheusClient is the Prometheus-backed implementation of the Client interface.
 // It manages counters, gauges, and histograms with thread-safe access.
 type prometheusClient struct {
@@ -213,13 +216,12 @@ func (c *prometheusClient) Inc(ctx context.Context, name string, tags ...string)
 //
 //	client.Add(ctx, "bytes_sent", 1024, "endpoint", "/upload")
 func (c *prometheusClient) Add(_ context.Context, name string, value int64, tags ...string) {
-	labelNames := extractLabelNames(tags)
-
 	c.counterMu.RLock()
 	counter, exists := c.counters[name]
 	c.counterMu.RUnlock()
 
 	if !exists {
+		labelNames := extractLabelNames(tags)
 		c.counterMu.Lock()
 		// Double-check after acquiring write lock
 		if counter, exists = c.counters[name]; !exists {
@@ -305,13 +307,12 @@ func (c *prometheusClient) GaugeDec(_ context.Context, name string, tags ...stri
 // getOrCreateGauge retrieves an existing gauge or creates a new one if it doesn't exist.
 // This method is thread-safe and uses double-checked locking for performance.
 func (c *prometheusClient) getOrCreateGauge(name string, tags []string) *prometheus.GaugeVec {
-	labelNames := extractLabelNames(tags)
-
 	c.gaugeMu.RLock()
 	gauge, exists := c.gauges[name]
 	c.gaugeMu.RUnlock()
 
 	if !exists {
+		labelNames := extractLabelNames(tags)
 		c.gaugeMu.Lock()
 		if gauge, exists = c.gauges[name]; !exists {
 			gauge = prometheus.NewGaugeVec(
@@ -372,7 +373,7 @@ func (c *prometheusClient) Histogram(_ context.Context, name string, value float
 //	// ... perform operation ...
 //	client.Duration(ctx, "request_duration_seconds", start, "endpoint", "/users")
 func (c *prometheusClient) Duration(_ context.Context, name string, start time.Time, tags ...string) {
-	elapsed := float64(time.Since(start)) / float64(time.Second)
+	elapsed := time.Since(start).Seconds()
 	histogram := c.getOrCreateHistogram(name, tags)
 	labelValues := extractLabelValues(tags)
 	histogram.WithLabelValues(labelValues...).Observe(elapsed)
@@ -381,13 +382,12 @@ func (c *prometheusClient) Duration(_ context.Context, name string, start time.T
 // getOrCreateHistogram retrieves an existing histogram or creates a new one if it doesn't exist.
 // This method is thread-safe and uses double-checked locking for performance.
 func (c *prometheusClient) getOrCreateHistogram(name string, tags []string) *prometheus.HistogramVec {
-	labelNames := extractLabelNames(tags)
-
 	c.histogramMu.RLock()
 	histogram, exists := c.histograms[name]
 	c.histogramMu.RUnlock()
 
 	if !exists {
+		labelNames := extractLabelNames(tags)
 		c.histogramMu.Lock()
 		if histogram, exists = c.histograms[name]; !exists {
 			buckets := c.buckets

@@ -93,7 +93,7 @@ func formatRules() {
 		Email: "a@b.com", Website: "https://x.com", Phone: "123",
 		Name: "John", Username: "john123",
 		TraceID: "550e8400-e29b-41d4-a716-446655440000",
-		Color: "#FF5733", Date: "2026-03-24T15:00:00Z",
+		Color:   "#FF5733", Date: "2026-03-24T15:00:00Z",
 	}))
 	check("invalid", validator.Validate(Form{
 		Email: "bad", Website: "ftp://x", Phone: "abc",
@@ -114,9 +114,9 @@ func networkRules() {
 	fmt.Println("-- Network: ip, ipv4, ipv6 --")
 
 	type Net struct {
-		Any  string `validate:"required,ip"`
-		V4   string `validate:"required,ipv4"`
-		V6   string `validate:"required,ipv6"`
+		Any string `validate:"required,ip"`
+		V4  string `validate:"required,ipv4"`
+		V6  string `validate:"required,ipv6"`
 	}
 
 	check("valid", validator.Validate(Net{Any: "10.0.0.1", V4: "10.0.0.1", V6: "::1"}))

@@ -73,7 +73,7 @@ type BufferedWriteSyncer struct {
 	ticker     *time.Ticker
 	stop       chan struct{} // signals the flush goroutine to stop
 	done       chan struct{} // closed when flush goroutine exits
-	stopOnce   sync.Once    // ensures Stop() is idempotent
+	stopOnce   sync.Once     // ensures Stop() is idempotent
 }
 
 // NewBufferedWriteSyncer creates a BufferedWriteSyncer that wraps the given

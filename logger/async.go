@@ -3,7 +3,6 @@
 package logger
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"sync"
@@ -17,12 +16,12 @@ type AsyncLogger struct {
 }
 
 type asyncRuntime struct {
-	queue   chan *Entry
-	wg      *sync.WaitGroup
-	ctx     context.Context
-	cancel  context.CancelFunc
-	stopped chan struct{}
-	writer  *Logger
+	queue     chan *Entry
+	wg        *sync.WaitGroup
+	done      chan struct{}
+	closeOnce sync.Once
+	stopped   chan struct{}
+	writer    *Logger
 }
 
 // NewAsyncLogger creates a new async logger that wraps the given logger.
@@ -45,12 +44,10 @@ func NewAsyncLogger(logger *Logger, queueSize int) *AsyncLogger {
 		queueSize = 100 // Default queue size
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
 	rt := &asyncRuntime{
 		queue:   make(chan *Entry, queueSize),
 		wg:      &sync.WaitGroup{},
-		ctx:     ctx,
-		cancel:  cancel,
+		done:    make(chan struct{}),
 		stopped: make(chan struct{}),
 		writer:  logger,
 	}
@@ -76,7 +73,7 @@ func (al *AsyncLogger) worker() {
 				return
 			}
 			al.rt.writer.writeEntry(entry)
-		case <-al.rt.ctx.Done():
+		case <-al.rt.done:
 			al.drainQueue()
 			close(al.rt.stopped)
 			return
@@ -106,7 +103,7 @@ func (al *AsyncLogger) log(level Level, skipOffset int, msg string, fields ...Fi
 
 	select {
 	case al.rt.queue <- entry:
-	case <-al.rt.ctx.Done():
+	case <-al.rt.done:
 		al.rt.writer.writeEntry(entry)
 	default:
 		al.rt.writer.writeEntry(entry)
@@ -163,7 +160,7 @@ func (al *AsyncLogger) Debugw(msg string, keysAndValues ...any) {
 	fsp, n := al.logger.parseKeysAndValues(keysAndValues...)
 	if fsp != nil {
 		al.log(LevelDebug, 1, msg, (*fsp)[:n]...)
-		fieldSlicePool.Put(fsp)
+		putFieldSlice(fsp)
 	} else {
 		al.log(LevelDebug, 1, msg)
 	}
@@ -219,7 +216,7 @@ func (al *AsyncLogger) Infow(msg string, keysAndValues ...any) {
 	fsp, n := al.logger.parseKeysAndValues(keysAndValues...)
 	if fsp != nil {
 		al.log(LevelInfo, 1, msg, (*fsp)[:n]...)
-		fieldSlicePool.Put(fsp)
+		putFieldSlice(fsp)
 	} else {
 		al.log(LevelInfo, 1, msg)
 	}
@@ -275,7 +272,7 @@ func (al *AsyncLogger) Warnw(msg string, keysAndValues ...any) {
 	fsp, n := al.logger.parseKeysAndValues(keysAndValues...)
 	if fsp != nil {
 		al.log(LevelWarn, 1, msg, (*fsp)[:n]...)
-		fieldSlicePool.Put(fsp)
+		putFieldSlice(fsp)
 	} else {
 		al.log(LevelWarn, 1, msg)
 	}
@@ -331,7 +328,7 @@ func (al *AsyncLogger) Errorw(msg string, keysAndValues ...any) {
 	fsp, n := al.logger.parseKeysAndValues(keysAndValues...)
 	if fsp != nil {
 		al.log(LevelError, 1, msg, (*fsp)[:n]...)
-		fieldSlicePool.Put(fsp)
+		putFieldSlice(fsp)
 	} else {
 		al.log(LevelError, 1, msg)
 	}
@@ -418,11 +415,9 @@ func (al *AsyncLogger) Flush() {
 	if al == nil || al.rt == nil {
 		return
 	}
-	select {
-	case <-al.rt.ctx.Done():
-	default:
-		al.rt.cancel()
-	}
+	al.rt.closeOnce.Do(func() {
+		close(al.rt.done)
+	})
 	al.rt.wg.Wait()
 	<-al.rt.stopped
 	al.rt.writer.flushOutputs()

@@ -27,8 +27,6 @@ var (
 	jsonKeyStacktraceBytes = []byte(`"` + LogEncoderStacktraceKey + `":`)
 )
 
-
-
 // levelToLower returns the lowercase level string (switch avoids map lookup overhead).
 func levelToLower(level Level) string {
 	switch level {
@@ -101,7 +99,7 @@ type Encoder interface {
 
 	// EncodeTo encodes an entry and writes the bytes directly to the WriteSyncer.
 	// Returns the number of bytes written. This is the preferred method for
-	// production use as it avoids the []byte → string copy.
+	// production use as it avoids the []byte -> string copy.
 	EncodeTo(entry *Entry, ws WriteSyncer) (int, error)
 }
 
@@ -126,8 +124,11 @@ func (e *JSONEncoder) encodeToBuffer(entry *Entry) *[]byte {
 
 	buf = append(buf, '{')
 
-	// ts
-	entryTime := entry.Time.In(e.timezone)
+	// ts — fast-path: skip In() when timezone is already UTC
+	entryTime := entry.Time
+	if e.timezone != time.UTC {
+		entryTime = entryTime.In(e.timezone)
+	}
 	buf = append(buf, jsonKeyTimeBytes...)
 	buf = entryTime.AppendFormat(buf, time.RFC3339Nano)
 	buf = append(buf, '"')
@@ -208,7 +209,7 @@ func (e *JSONEncoder) Encode(entry *Entry) string {
 }
 
 // EncodeTo encodes an entry and writes bytes directly to the WriteSyncer.
-// Avoids the []byte → string copy that Encode() requires.
+// Avoids the []byte -> string copy that Encode() requires.
 func (e *JSONEncoder) EncodeTo(entry *Entry, ws WriteSyncer) (int, error) {
 	bp := e.encodeToBuffer(entry)
 	n, err := ws.Write(*bp)
@@ -229,12 +230,17 @@ func newConsoleEncoder(config *Config) *ConsoleEncoder {
 	}
 }
 
-// Encode encodes an entry as human-readable console output.
-func (e *ConsoleEncoder) Encode(entry *Entry) string {
+// encodeToBuffer encodes console output into a pooled byte buffer.
+// Caller must call putBuf(bp) after consuming the buffer.
+func (e *ConsoleEncoder) encodeToBuffer(entry *Entry) *[]byte {
 	bp := getBuf()
 	buf := *bp
 
-	entryTime := entry.Time.In(e.timezone)
+	// Fast-path: skip In() when timezone is already UTC
+	entryTime := entry.Time
+	if e.timezone != time.UTC {
+		entryTime = entryTime.In(e.timezone)
+	}
 	buf = entryTime.AppendFormat(buf, time.RFC3339Nano)
 	buf = append(buf, '\t')
 
@@ -274,6 +280,12 @@ func (e *ConsoleEncoder) Encode(entry *Entry) string {
 	}
 
 	*bp = buf
+	return bp
+}
+
+// Encode encodes an entry as human-readable console output.
+func (e *ConsoleEncoder) Encode(entry *Entry) string {
+	bp := e.encodeToBuffer(entry)
 	result := string(*bp)
 	putBuf(bp)
 	return result
@@ -281,49 +293,7 @@ func (e *ConsoleEncoder) Encode(entry *Entry) string {
 
 // EncodeTo writes console-encoded entry directly to WriteSyncer using pooled buffer.
 func (e *ConsoleEncoder) EncodeTo(entry *Entry, ws WriteSyncer) (int, error) {
-	bp := getBuf()
-	buf := *bp
-
-	entryTime := entry.Time.In(e.timezone)
-	buf = entryTime.AppendFormat(buf, time.RFC3339Nano)
-	buf = append(buf, '\t')
-
-	levelStr := levelToUpper(entry.Level)
-	if e.config.IsDevelopment {
-		levelStr = colorizeLevel(levelStr, entry.Level)
-	}
-	buf = append(buf, levelStr...)
-
-	if entry.CallerDefined {
-		buf = append(buf, '\t')
-		buf = append(buf, entry.CallerFile...)
-		buf = append(buf, ':')
-		buf = strconv.AppendInt(buf, int64(entry.CallerLine), 10)
-	}
-
-	buf = append(buf, '\t')
-	buf = append(buf, entry.Message...)
-
-	if len(entry.Fields) > 0 {
-		buf = append(buf, '\t')
-		for i := range entry.Fields {
-			if i > 0 {
-				buf = append(buf, ' ')
-			}
-			buf = append(buf, entry.Fields[i].Key...)
-			buf = append(buf, '=')
-			buf = appendConsoleFieldValue(buf, &entry.Fields[i])
-		}
-	}
-
-	buf = append(buf, '\n')
-
-	if entry.Stacktrace != "" {
-		buf = append(buf, entry.Stacktrace...)
-		buf = append(buf, '\n')
-	}
-
-	*bp = buf
+	bp := e.encodeToBuffer(entry)
 	n, err := ws.Write(*bp)
 	putBuf(bp)
 	return n, err
@@ -339,8 +309,14 @@ func appendConsoleFieldValue(buf []byte, f *Field) []byte {
 	case FieldTypeBool:
 		return strconv.AppendBool(buf, f.Integer == 1)
 	case FieldTypeFloat64:
-		return strconv.AppendFloat(buf, math.Float64frombits(uint64(f.Integer)), 'f', -1, 64)
+		return strconv.AppendFloat(buf, int64BitsToFloat64(f.Integer), 'f', -1, 64)
 	default:
+		if f.Iface == nil {
+			return append(buf, "<nil>"...)
+		}
+		if err, ok := f.Iface.(error); ok {
+			return append(buf, err.Error()...)
+		}
 		return append(buf, fmt.Sprintf("%v", f.Iface)...)
 	}
 }
@@ -372,39 +348,53 @@ func appendTypedFieldValue(buf []byte, f *Field) []byte {
 	case FieldTypeBool:
 		return strconv.AppendBool(buf, f.Integer == 1)
 	case FieldTypeFloat64:
-		return appendJSONFloat(buf, math.Float64frombits(uint64(f.Integer)))
+		return appendJSONFloat(buf, int64BitsToFloat64(f.Integer))
 	default:
 		return appendJSONValue(buf, f.Iface)
 	}
 }
 
+// appendJSONSignedInt appends a signed integer value as JSON.
+func appendJSONSignedInt(buf []byte, v any) ([]byte, bool) {
+	switch val := v.(type) {
+	case int:
+		return strconv.AppendInt(buf, int64(val), 10), true
+	case int8:
+		return strconv.AppendInt(buf, int64(val), 10), true
+	case int16:
+		return strconv.AppendInt(buf, int64(val), 10), true
+	case int32:
+		return strconv.AppendInt(buf, int64(val), 10), true
+	case int64:
+		return strconv.AppendInt(buf, int64(val), 10), true
+	default:
+		return buf, false
+	}
+}
 
+// appendJSONUnsignedInt appends an unsigned integer value as JSON.
+func appendJSONUnsignedInt(buf []byte, v any) ([]byte, bool) {
+	switch val := v.(type) {
+	case uint:
+		return strconv.AppendUint(buf, uint64(val), 10), true
+	case uint8:
+		return strconv.AppendUint(buf, uint64(val), 10), true
+	case uint16:
+		return strconv.AppendUint(buf, uint64(val), 10), true
+	case uint32:
+		return strconv.AppendUint(buf, uint64(val), 10), true
+	case uint64:
+		return strconv.AppendUint(buf, uint64(val), 10), true
+	default:
+		return buf, false
+	}
+}
 
 // appendJSONValue appends a JSON-encoded value for FieldTypeAny (fallback).
 func appendJSONValue(buf []byte, v any) []byte {
 	switch val := v.(type) {
 	case string:
 		return appendJSONString(buf, val)
-	case int:
-		return strconv.AppendInt(buf, int64(val), 10)
-	case int8:
-		return strconv.AppendInt(buf, int64(val), 10)
-	case int16:
-		return strconv.AppendInt(buf, int64(val), 10)
-	case int32:
-		return strconv.AppendInt(buf, int64(val), 10)
-	case int64:
-		return strconv.AppendInt(buf, int64(val), 10)
-	case uint:
-		return strconv.AppendUint(buf, uint64(val), 10)
-	case uint8:
-		return strconv.AppendUint(buf, uint64(val), 10)
-	case uint16:
-		return strconv.AppendUint(buf, uint64(val), 10)
-	case uint32:
-		return strconv.AppendUint(buf, uint64(val), 10)
-	case uint64:
-		return strconv.AppendUint(buf, uint64(val), 10)
 	case float32:
 		return appendJSONFloat(buf, float64(val))
 	case float64:
@@ -416,6 +406,12 @@ func appendJSONValue(buf []byte, v any) []byte {
 	case error:
 		return appendJSONString(buf, val.Error())
 	default:
+		if result, ok := appendJSONSignedInt(buf, v); ok {
+			return result
+		}
+		if result, ok := appendJSONUnsignedInt(buf, v); ok {
+			return result
+		}
 		jsonBytes, err := jsonLib.Marshal(val)
 		if err != nil {
 			return appendJSONString(buf, fmt.Sprintf("%v", val))

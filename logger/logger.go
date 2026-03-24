@@ -29,7 +29,15 @@ var fieldSlicePool = sync.Pool{
 	},
 }
 
-// callerCache caches runtime.Caller file paths → short paths to avoid
+func putFieldSlice(fsp *[]Field) {
+	// Don't retain arbitrarily large backing arrays
+	if cap(*fsp) > 64 {
+		return
+	}
+	fieldSlicePool.Put(fsp)
+}
+
+// callerCache caches runtime.Caller file paths -> short paths to avoid
 // repeated filepath.Rel / GetShortPath calls on every log entry.
 var callerCache sync.Map // map[string]string
 
@@ -50,11 +58,21 @@ const (
 	globalCallerSkip     = 2
 )
 
-var defaultLevelOrder = map[Level]int{
-	LevelDebug: 0,
-	LevelInfo:  1,
-	LevelWarn:  2,
-	LevelError: 3,
+// levelOrder returns the numeric priority of a Level using a switch
+// (avoids map hashing and lookup overhead on every log call).
+func levelOrder(l Level) int {
+	switch l {
+	case LevelDebug:
+		return 0
+	case LevelInfo:
+		return 1
+	case LevelWarn:
+		return 2
+	case LevelError:
+		return 3
+	default:
+		return -1
+	}
 }
 
 // NewLogger creates a new logger instance with the provided configuration and output writers.
@@ -239,7 +257,7 @@ func (l *Logger) Debugw(msg string, keysAndValues ...any) {
 	fsp, n := l.parseKeysAndValues(keysAndValues...)
 	if fsp != nil {
 		l.log(LevelDebug, 1, msg, (*fsp)[:n]...)
-		fieldSlicePool.Put(fsp)
+		putFieldSlice(fsp)
 	} else {
 		l.log(LevelDebug, 1, msg)
 	}
@@ -295,11 +313,12 @@ func (l *Logger) Infow(msg string, keysAndValues ...any) {
 	fsp, n := l.parseKeysAndValues(keysAndValues...)
 	if fsp != nil {
 		l.log(LevelInfo, 1, msg, (*fsp)[:n]...)
-		fieldSlicePool.Put(fsp)
+		putFieldSlice(fsp)
 	} else {
 		l.log(LevelInfo, 1, msg)
 	}
 }
+
 // Warn logs a message at warning level.
 //
 // Input:
@@ -350,11 +369,12 @@ func (l *Logger) Warnw(msg string, keysAndValues ...any) {
 	fsp, n := l.parseKeysAndValues(keysAndValues...)
 	if fsp != nil {
 		l.log(LevelWarn, 1, msg, (*fsp)[:n]...)
-		fieldSlicePool.Put(fsp)
+		putFieldSlice(fsp)
 	} else {
 		l.log(LevelWarn, 1, msg)
 	}
 }
+
 // Error logs a message at error level.
 //
 // Input:
@@ -405,11 +425,12 @@ func (l *Logger) Errorw(msg string, keysAndValues ...any) {
 	fsp, n := l.parseKeysAndValues(keysAndValues...)
 	if fsp != nil {
 		l.log(LevelError, 1, msg, (*fsp)[:n]...)
-		fieldSlicePool.Put(fsp)
+		putFieldSlice(fsp)
 	} else {
 		l.log(LevelError, 1, msg)
 	}
 }
+
 // Fatal logs a message at error level and then exits the program with os.Exit(1).
 //
 // Input:
@@ -462,7 +483,7 @@ func (l *Logger) Fatalw(msg string, keysAndValues ...any) {
 	fsp, n := l.parseKeysAndValues(keysAndValues...)
 	if fsp != nil {
 		l.log(LevelError, 1, msg, (*fsp)[:n]...)
-		fieldSlicePool.Put(fsp)
+		putFieldSlice(fsp)
 	} else {
 		l.log(LevelError, 1, msg)
 	}
@@ -484,7 +505,7 @@ func (l *Logger) formatArgs(args ...any) (string, []Field) {
 			// Copy fields out since we need to return them and put the pool back
 			fields := make([]Field, n)
 			copy(fields, (*fsp)[:n])
-			fieldSlicePool.Put(fsp)
+			putFieldSlice(fsp)
 			return msg, fields
 		}
 		return msg, nil
@@ -539,10 +560,9 @@ func (l *Logger) createEntry(level Level, skipOffset int, msg string, fields []F
 	entry.Level = level
 	entry.Message = msg
 
-	// Append pre-processed default fields (already processed at With/NewLogger time)
-	l.mu.RLock()
+	// Append pre-processed default fields (already processed at With/NewLogger time).
+	// No lock needed: processedFields is immutable after construction; With() creates a new Logger.
 	entry.Fields = append(entry.Fields, l.processedFields...)
-	l.mu.RUnlock()
 
 	// Append per-call fields (processField handles struct tag omit/mask)
 	for i := range fields {
@@ -561,15 +581,15 @@ func (l *Logger) createEntry(level Level, skipOffset int, msg string, fields []F
 }
 
 func (l *Logger) shouldLog(level Level) bool {
-	levelVal, ok := defaultLevelOrder[level]
-	if !ok {
+	lv := levelOrder(level)
+	if lv < 0 {
 		return false
 	}
-	configLevelVal, ok := defaultLevelOrder[l.config.LogLevel]
-	if !ok {
+	cv := levelOrder(l.config.LogLevel)
+	if cv < 0 {
 		return true
 	}
-	return levelVal >= configLevelVal
+	return lv >= cv
 }
 
 func (l *Logger) setCallerInfo(entry *Entry, skipOffset int) {
@@ -601,9 +621,8 @@ func (*Logger) getStacktrace() string {
 }
 
 func (l *Logger) writeEntry(entry *Entry) {
-	l.mu.RLock()
+	// No lock needed: outputs is immutable after construction.
 	outputs := l.outputs
-	l.mu.RUnlock()
 
 	switch len(outputs) {
 	case 0:
