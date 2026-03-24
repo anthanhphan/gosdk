@@ -236,48 +236,57 @@ func TestNewEngineForArch(t *testing.T) {
 	}
 }
 
-func TestGetDefaultEngine(t *testing.T) {
-	tests := []struct {
-		name  string
-		check func(t *testing.T, engine engine)
-	}{
-		{
-			name: "getDefaultEngine should return non-nil engine",
-			check: func(t *testing.T, e engine) {
-				if e == nil {
-					t.Error("Default engine should not be nil")
-				}
-			},
-		},
-		{
-			name: "getDefaultEngine should return same instance on multiple calls",
-			check: func(t *testing.T, _ engine) {
-				// Call multiple times - should return same instance due to sync.Once
-				e1 := getDefaultEngine()
-				e2 := getDefaultEngine()
-				e3 := getDefaultEngine()
+func TestFunctionPointers(t *testing.T) {
+	t.Run("marshalFn should be initialized", func(t *testing.T) {
+		if marshalFn == nil {
+			t.Error("marshalFn should not be nil after init")
+		}
+		data, err := marshalFn(testUser{ID: 1, Name: "Test"})
+		if err != nil {
+			t.Errorf("marshalFn should work: %v", err)
+		}
+		if len(data) == 0 {
+			t.Error("marshaled data should not be empty")
+		}
+	})
 
-				// All should work (same instance)
-				data1, err1 := e1.Marshal(testUser{ID: 1, Name: "Test1"})
-				data2, err2 := e2.Marshal(testUser{ID: 2, Name: "Test2"})
-				data3, err3 := e3.Marshal(testUser{ID: 3, Name: "Test3"})
+	t.Run("unmarshalFn should be initialized", func(t *testing.T) {
+		if unmarshalFn == nil {
+			t.Error("unmarshalFn should not be nil after init")
+		}
+		var user testUser
+		err := unmarshalFn([]byte(`{"id":1,"name":"Test"}`), &user)
+		if err != nil {
+			t.Errorf("unmarshalFn should work: %v", err)
+		}
+		if user.ID != 1 {
+			t.Errorf("user ID = %d, want 1", user.ID)
+		}
+	})
 
-				if err1 != nil || err2 != nil || err3 != nil {
-					t.Error("All engines should work")
-				}
-				if len(data1) == 0 || len(data2) == 0 || len(data3) == 0 {
-					t.Error("All marshaled data should not be empty")
-				}
-			},
-		},
-	}
+	t.Run("marshalIndentFn should be initialized", func(t *testing.T) {
+		if marshalIndentFn == nil {
+			t.Error("marshalIndentFn should not be nil after init")
+		}
+	})
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			engine := getDefaultEngine()
-			tt.check(t, engine)
-		})
-	}
+	t.Run("validFn should be initialized", func(t *testing.T) {
+		if validFn == nil {
+			t.Error("validFn should not be nil after init")
+		}
+	})
+
+	t.Run("newEncoderFn should be initialized", func(t *testing.T) {
+		if newEncoderFn == nil {
+			t.Error("newEncoderFn should not be nil after init")
+		}
+	})
+
+	t.Run("newDecoderFn should be initialized", func(t *testing.T) {
+		if newDecoderFn == nil {
+			t.Error("newDecoderFn should not be nil after init")
+		}
+	})
 }
 
 func TestMarshal_EdgeCases(t *testing.T) {
@@ -848,60 +857,39 @@ func TestConcurrency(t *testing.T) {
 	}
 }
 
-func TestErrorContextWrapping(t *testing.T) {
-	tests := []struct {
-		name      string
-		operation string
-		check     func(t *testing.T, err error)
-	}{
-		{
-			name:      "marshal error should contain engine context",
-			operation: "marshal",
-			check: func(t *testing.T, err error) {
-				if err == nil {
-					t.Error("Expected error for channel type")
-					return
-				}
-				errStr := err.Error()
-				// Check for engine context (either "sonic engine" or "goccy engine")
-				hasContext := contains([]byte(errStr), []byte("sonic engine")) ||
-					contains([]byte(errStr), []byte("goccy engine"))
-				if !hasContext {
-					t.Errorf("Error should contain engine context, got: %v", err)
-				}
-			},
-		},
-		{
-			name:      "unmarshal error should contain engine context",
-			operation: "unmarshal",
-			check: func(t *testing.T, err error) {
-				if err == nil {
-					t.Error("Expected error for invalid JSON")
-					return
-				}
-				errStr := err.Error()
-				// Check for engine context
-				hasContext := contains([]byte(errStr), []byte("sonic engine")) ||
-					contains([]byte(errStr), []byte("goccy engine"))
-				if !hasContext {
-					t.Errorf("Error should contain engine context, got: %v", err)
-				}
-			},
-		},
-	}
+func TestErrorReporting(t *testing.T) {
+	t.Run("marshal error should return meaningful error", func(t *testing.T) {
+		_, err := Marshal(make(chan int))
+		if err == nil {
+			t.Error("Expected error for channel type")
+			return
+		}
+		if len(err.Error()) == 0 {
+			t.Error("Error message should not be empty")
+		}
+	})
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			var err error
-			switch tt.operation {
-			case "marshal":
-				_, err = Marshal(make(chan int))
-			case "unmarshal":
-				err = Unmarshal([]byte(`{"invalid": json}`), &testUser{})
-			}
-			tt.check(t, err)
-		})
-	}
+	t.Run("unmarshal error should return meaningful error", func(t *testing.T) {
+		err := Unmarshal([]byte(`{invalid}`), &testUser{})
+		if err == nil {
+			t.Error("Expected error for invalid JSON")
+			return
+		}
+		if len(err.Error()) == 0 {
+			t.Error("Error message should not be empty")
+		}
+	})
+
+	t.Run("marshalIndent error should return meaningful error", func(t *testing.T) {
+		_, err := MarshalIndent(make(chan int), "", "  ")
+		if err == nil {
+			t.Error("Expected error for channel type")
+			return
+		}
+		if len(err.Error()) == 0 {
+			t.Error("Error message should not be empty")
+		}
+	})
 }
 
 // Helper function to check if a byte slice contains another byte slice.

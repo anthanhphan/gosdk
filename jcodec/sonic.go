@@ -5,7 +5,6 @@
 package jcodec
 
 import (
-	"fmt"
 	"io"
 
 	"github.com/bytedance/sonic"
@@ -21,43 +20,32 @@ func newSonicEngine() engine {
 	return &sonicEngine{}
 }
 
-// Marshal converts a Go value to JSON bytes using Sonic's high-performance engine.
-func (*sonicEngine) Marshal(v interface{}) ([]byte, error) {
-	data, err := sonic.Marshal(v)
-	if err != nil {
-		return nil, fmt.Errorf("sonic engine: %w", err)
-	}
-	return data, nil
+// Marshal converts a Go value to JSON bytes using Sonic.
+func (*sonicEngine) Marshal(v any) ([]byte, error) {
+	return sonic.Marshal(v)
 }
 
-// Unmarshal converts JSON bytes to a Go value using Sonic's high-performance engine.
-func (*sonicEngine) Unmarshal(data []byte, v interface{}) error {
-	if err := sonic.Unmarshal(data, v); err != nil {
-		return fmt.Errorf("sonic engine: %w", err)
-	}
-	return nil
+// Unmarshal converts JSON bytes to a Go value using Sonic.
+func (*sonicEngine) Unmarshal(data []byte, v any) error {
+	return sonic.Unmarshal(data, v)
 }
 
-// MarshalIndent converts a Go value to pretty-printed JSON bytes using Sonic's high-performance engine.
-func (*sonicEngine) MarshalIndent(v interface{}, prefix, indent string) ([]byte, error) {
-	data, err := sonic.MarshalIndent(v, prefix, indent)
-	if err != nil {
-		return nil, fmt.Errorf("sonic engine: %w", err)
-	}
-	return data, nil
+// MarshalIndent converts a Go value to pretty-printed JSON bytes using Sonic.
+func (*sonicEngine) MarshalIndent(v any, prefix, indent string) ([]byte, error) {
+	return sonic.MarshalIndent(v, prefix, indent)
 }
 
-// Valid reports whether data is valid JSON using Sonic's validation.
+// Valid reports whether data is valid JSON using Sonic.
 func (*sonicEngine) Valid(data []byte) bool {
 	return sonic.Valid(data)
 }
 
-// NewEncoder returns a new encoder that writes to w using Sonic's high-performance engine.
+// NewEncoder returns a new encoder that writes to w using Sonic.
 func (*sonicEngine) NewEncoder(w io.Writer) Encoder {
 	return sonic.ConfigDefault.NewEncoder(w)
 }
 
-// NewDecoder returns a new decoder that reads from r using Sonic's high-performance engine.
+// NewDecoder returns a new decoder that reads from r using Sonic.
 func (*sonicEngine) NewDecoder(r io.Reader) Decoder {
 	return sonic.ConfigDefault.NewDecoder(r)
 }
