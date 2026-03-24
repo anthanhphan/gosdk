@@ -115,17 +115,25 @@ func RunWithContext(ctx context.Context, fn func(ctx context.Context)) {
 //	})
 //	defer cancel() // optional: cancel early if no longer needed
 func RunWithTimeout(timeout time.Duration, fn func(ctx context.Context)) context.CancelFunc {
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	ctx, cancel := context.WithCancelCause(context.Background())
+
+	timer := time.AfterFunc(timeout, func() {
+		cancel(context.DeadlineExceeded)
+	})
+
+	// Wrap ctx so Err() returns DeadlineExceeded when timed out.
+	tctx := &timeoutCtx{Context: ctx}
 
 	go func() {
 		defer recoverPanic()
-		defer cancel()
+		defer cancel(nil)
+		defer timer.Stop()
 
 		done := make(chan struct{})
 		go func() {
 			defer close(done)
 			defer recoverPanic()
-			fn(ctx)
+			fn(tctx)
 		}()
 
 		select {
@@ -140,5 +148,19 @@ func RunWithTimeout(timeout time.Duration, fn func(ctx context.Context)) context
 		}
 	}()
 
-	return cancel
+	return func() { cancel(nil) }
+}
+
+// timeoutCtx wraps a context created by WithCancelCause so that Err()
+// returns context.DeadlineExceeded (instead of context.Canceled) when
+// the cancellation cause is DeadlineExceeded.
+type timeoutCtx struct {
+	context.Context
+}
+
+func (t *timeoutCtx) Err() error {
+	if cause := context.Cause(t.Context); cause != nil {
+		return cause
+	}
+	return t.Context.Err()
 }
