@@ -8,129 +8,75 @@ import (
 	"strings"
 
 	"github.com/anthanhphan/gosdk/jcodec"
-	"github.com/anthanhphan/gosdk/logger"
 	"github.com/anthanhphan/gosdk/utils"
-	"gopkg.in/yaml.v2"
+	"github.com/anthanhphan/gosdk/validator"
+	"gopkg.in/yaml.v3"
 )
 
-// Environment constants are imported from utils for consistency
-const (
-	EnvLocal      = utils.EnvLocal
-	EnvQC         = utils.EnvQC
-	EnvStaging    = utils.EnvStaging
-	EnvProduction = utils.EnvProduction
-)
-
-// ParseConfig parses a configuration file and unmarshals it into the provided model.
-//
-// Input:
-//   - path: The file path to the configuration file
-//   - model: A pointer to the struct that will hold the parsed configuration
-//
-// Output:
-//   - *T: The parsed configuration model
-//   - error: Any error that occurred during parsing
+// Load parses a configuration file at the given path and returns the parsed config.
+// Supported formats: JSON (.json), YAML (.yaml, .yml).
+// After parsing, struct validation tags are automatically validated.
 //
 // Example:
 //
-//	type AppConfig struct {
-//	    DatabaseURL string `json:"database_url" yaml:"database_url"`
-//	    Port        int    `json:"port" yaml:"port"`
-//	}
-//
-//	var config AppConfig
-//	parsedConfig, err := ParseConfig("./config.json", &config)
+//	config, err := conflux.Load[AppConfig]("./config/config.local.yaml")
 //	if err != nil {
-//	    log.Fatal("Failed to parse config:", err)
+//	    log.Fatal(err)
 //	}
-//	fmt.Printf("Database URL: %s\n", parsedConfig.DatabaseURL)
-func ParseConfig[T any](path string, model *T) (*T, error) {
-	log := logger.NewLoggerWithFields(logger.String("prefix", "conflux::ParseConfig"))
-
+func Load[T any](path string) (*T, error) {
 	if path == "" {
-		log.Error("config path is required")
 		return nil, fmt.Errorf("config path is required")
 	}
 
-	// Validate file extension
 	ext := strings.TrimPrefix(filepath.Ext(path), ".")
-	if !isValidExtension(ext) {
-		log.Errorf("unsupported file extension %s", ext)
+	if !validExts[ext] {
 		return nil, fmt.Errorf("unsupported file extension: %s", ext)
 	}
 
-	// Read file safely to prevent directory traversal
 	data, err := utils.ReadFileSecurely(path)
 	if err != nil {
-		log.Error(err.Error())
-		return nil, err
+		return nil, fmt.Errorf("failed to read config: %w", err)
 	}
 
-	// Parse based on file extension
-	if err := unmarshalConfig(data, ext, model); err != nil {
-		log.Errorf("failed to unmarshal %s: %v", ext, err)
+	var cfg T
+	if err := unmarshal(data, ext, &cfg); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal %s: %w", ext, err)
 	}
 
-	return model, nil
+	if err := validator.Validate(&cfg); err != nil {
+		return nil, fmt.Errorf("config validation failed: %w", err)
+	}
+
+	return &cfg, nil
 }
 
-// GetConfigPathFromEnv generates a configuration file path based on environment and file extension.
-//
-// Input:
-//   - env: The environment name (qc, staging, production, local)
-//   - ext: Optional file extension (defaults to json)
-//
-// Output:
-//   - string: The generated configuration file path
+// MustLoad is like Load but panics on error. Use in main() or init().
 //
 // Example:
 //
-//	// Get JSON config for production
-//	path := GetConfigPathFromEnv("production")
-//	// Result: "./config/config.production.json"
-//
-//	// Get YAML config for staging
-//	path := GetConfigPathFromEnv("staging", "yaml")
-//	// Result: "./config/config.staging.yaml"
-func GetConfigPathFromEnv(env string, ext ...string) string {
-	fileExt := DefaultExtension
-	if len(ext) > 0 && ext[0] != "" {
-		fileExt = ext[0]
+//	config := conflux.MustLoad[AppConfig]("./config/config.local.yaml")
+func MustLoad[T any](path string) *T {
+	cfg, err := Load[T](path)
+	if err != nil {
+		panic(fmt.Sprintf("conflux: %v", err))
 	}
-
-	configPaths := map[string]string{
-		EnvQC:         QcConfigPath,
-		EnvStaging:    StagingConfigPath,
-		EnvProduction: ProductionConfigPath,
-		EnvLocal:      LocalConfigPath,
-	}
-
-	basePath, exists := configPaths[env]
-	if !exists {
-		basePath = DefaultConfigPath
-	}
-
-	return fmt.Sprintf("%s.%s", basePath, fileExt)
+	return cfg
 }
 
-// isValidExtension checks if the provided file extension is supported.
-func isValidExtension(ext string) bool {
-	validExts := map[string]bool{
-		ExtensionJSON: true,
-		ExtensionYAML: true,
-		ExtensionYML:  true,
-	}
-	return validExts[ext]
+// validExts is the set of supported config file extensions.
+var validExts = map[string]bool{
+	ExtensionJSON: true,
+	ExtensionYAML: true,
+	ExtensionYML:  true,
 }
 
-// unmarshalConfig unmarshals the data into the model based on the file extension.
-func unmarshalConfig[T any](data []byte, ext string, model *T) error {
+// unmarshal decodes data into dst based on file extension.
+func unmarshal(data []byte, ext string, dst any) error {
 	switch ext {
 	case ExtensionJSON:
-		return jcodec.Unmarshal(data, model)
+		return jcodec.Unmarshal(data, dst)
 	case ExtensionYAML, ExtensionYML:
-		return yaml.Unmarshal(data, model)
+		return yaml.Unmarshal(data, dst)
 	default:
 		return fmt.Errorf("unsupported file extension: %s", ext)
 	}

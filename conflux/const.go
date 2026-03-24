@@ -8,17 +8,3 @@ const (
 	ExtensionYAML = "yaml"
 	ExtensionYML  = "yml"
 )
-
-// Configuration file paths for different environments
-const (
-	QcConfigPath         = "./config/config.qc"
-	StagingConfigPath    = "./config/config.staging"
-	ProductionConfigPath = "./config/config.production"
-	LocalConfigPath      = "./config/config.local"
-)
-
-// Default configuration values
-const (
-	DefaultConfigPath = LocalConfigPath
-	DefaultExtension  = ExtensionJSON
-)

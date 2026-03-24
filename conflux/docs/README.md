@@ -1,6 +1,6 @@
 # Conflux Package
 
-A simple, type-safe configuration management package for Go applications. Parses JSON and YAML configuration files with environment-based path resolution.
+A simple, type-safe configuration parser for Go applications. Supports JSON and YAML formats.
 
 ## Installation
 
@@ -14,11 +14,8 @@ go get github.com/anthanhphan/gosdk/conflux
 package main
 
 import (
-	"os"
-
 	"github.com/anthanhphan/gosdk/conflux"
 	"github.com/anthanhphan/gosdk/logger"
-	"go.uber.org/zap"
 )
 
 type Config struct {
@@ -30,68 +27,56 @@ type Config struct {
 }
 
 func main() {
-	// Parse configuration based on environment
-	config, err := conflux.ParseConfig(
-		conflux.GetConfigPathFromEnv(os.Getenv("ENV"), conflux.ExtensionYAML),
-		&Config{},
-	)
-	if err != nil {
-		log.Fatalf("Failed to parse config: %v", err)
-	}
+	// MustLoad panics on error — ideal for program init
+	config := conflux.MustLoad[Config]("./config/config.local.yaml")
 
 	log.Infof("Server starting on port %d", config.Server.Port)
 }
 ```
 
-## Configuration
+## API
 
-### Environment Paths
+### `Load[T](path string) (*T, error)`
 
-| Environment  | Path                         |
-| ------------ | ---------------------------- |
-| `local`      | `./config/config.local`      |
-| `qc`         | `./config/config.qc`         |
-| `staging`    | `./config/config.staging`    |
-| `production` | `./config/config.production` |
-
-### File Extensions
-
-- **JSON** (`.json`) - Default format
-- **YAML** (`.yaml`, `.yml`) - Human-readable format
-
-## Usage Examples
-
-### Basic Configuration
+Parses a configuration file and returns the typed config. Returns an error if the file cannot be read or parsed.
 
 ```go
-type AppConfig struct {
-    DatabaseURL string `json:"database_url" yaml:"database_url"`
-    Port        int    `json:"port" yaml:"port"`
-}
-
-var config AppConfig
-parsedConfig, err := conflux.ParseConfig("./config.json", &config)
+config, err := conflux.Load[Config]("./config/app.yaml")
 if err != nil {
-    log.Fatal("Failed to parse config:", err)
+    log.Fatal(err)
 }
-fmt.Printf("Database URL: %s\n", parsedConfig.DatabaseURL)
 ```
 
-### Environment-Based Configuration
+### `MustLoad[T](path string) *T`
+
+Same as `Load`, but panics on error. Intended for `main()` or `init()`.
 
 ```go
-// Get JSON config for production
-path := conflux.GetConfigPathFromEnv("production")
-// Result: "./config/config.production.json"
-
-// Get YAML config for staging
-path := conflux.GetConfigPathFromEnv("staging", "yaml")
-// Result: "./config/config.staging.yaml"
+config := conflux.MustLoad[Config]("./config/app.yaml")
 ```
 
-### Configuration Files
+### Supported File Extensions
 
-#### JSON Configuration File
+- **JSON** (`.json`)
+- **YAML** (`.yaml`, `.yml`)
+
+## Configuration File Examples
+
+#### YAML
+
+```yaml
+server:
+  port: 8080
+  name: example
+
+logger:
+  level: debug
+  encoding: json
+  disable_caller: false
+  is_development: true
+```
+
+#### JSON
 
 ```json
 {
@@ -104,18 +89,4 @@ path := conflux.GetConfigPathFromEnv("staging", "yaml")
     "encoding": "json"
   }
 }
-```
-
-#### YAML Configuration File
-
-```yaml
-server:
-  port: 8080
-  name: example
-
-logger:
-  level: debug
-  encoding: json
-  disable_caller: false
-  is_development: true
 ```

@@ -4,359 +4,370 @@ package conflux
 
 import (
 	"os"
+	"strings"
 	"testing"
 )
 
-// TestConfig represents a test configuration structure
-type TestConfig struct {
-	DatabaseURL string `json:"database_url" yaml:"database_url"`
-	Port        int    `json:"port" yaml:"port"`
+// ============================================================================
+// Test Config Types
+// ============================================================================
+
+type testConfig struct {
+	DatabaseURL string `json:"database_url" yaml:"database_url" validate:"required"`
+	Port        int    `json:"port" yaml:"port" validate:"required,min=0,max=65535"`
 	Debug       bool   `json:"debug" yaml:"debug"`
 }
 
-func TestParseConfig(t *testing.T) {
-	// Create a temporary directory for testing
-	tempDir, err := os.MkdirTemp("", "conflux_test")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer func() { _ = os.RemoveAll(tempDir) }()
+// ============================================================================
+// Helpers
+// ============================================================================
 
-	// Change to temp directory
-	originalDir, err := os.Getwd()
+func setupTempDir(t *testing.T) (cleanup func()) {
+	t.Helper()
+	tmpDir, err := os.MkdirTemp("", "conflux_test")
 	if err != nil {
-		t.Fatalf("Failed to get current directory: %v", err)
+		t.Fatalf("create temp dir: %v", err)
 	}
+	origDir, _ := os.Getwd()
+	_ = os.Chdir(tmpDir)
+	return func() {
+		_ = os.Chdir(origDir)
+		_ = os.RemoveAll(tmpDir)
+	}
+}
+
+func writeFile(t *testing.T, name, content string) {
+	t.Helper()
+	if err := os.WriteFile(name, []byte(content), 0644); err != nil {
+		t.Fatalf("write %s: %v", name, err)
+	}
+}
+
+// ============================================================================
+// Load
+// ============================================================================
+
+func TestLoad_JSON(t *testing.T) {
+	cleanup := setupTempDir(t)
+	defer cleanup()
+
+	writeFile(t, "config.json", `{"database_url":"postgres://localhost","port":8080,"debug":true}`)
+	cfg, err := Load[testConfig]("config.json")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.DatabaseURL != "postgres://localhost" {
+		t.Errorf("database_url = %q", cfg.DatabaseURL)
+	}
+	if cfg.Port != 8080 {
+		t.Errorf("port = %d", cfg.Port)
+	}
+	if !cfg.Debug {
+		t.Error("debug should be true")
+	}
+}
+
+func TestLoad_YAML(t *testing.T) {
+	cleanup := setupTempDir(t)
+	defer cleanup()
+
+	writeFile(t, "config.yaml", "database_url: postgres://localhost\nport: 8080\ndebug: true")
+	cfg, err := Load[testConfig]("config.yaml")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Port != 8080 {
+		t.Errorf("port = %d", cfg.Port)
+	}
+}
+
+func TestLoad_YML(t *testing.T) {
+	cleanup := setupTempDir(t)
+	defer cleanup()
+
+	writeFile(t, "config.yml", "database_url: pg://localhost\nport: 3000")
+	cfg, err := Load[testConfig]("config.yml")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Port != 3000 {
+		t.Errorf("port = %d", cfg.Port)
+	}
+}
+
+func TestLoad_EmptyPath(t *testing.T) {
+	_, err := Load[testConfig]("")
+	if err == nil || !strings.Contains(err.Error(), "config path is required") {
+		t.Errorf("expected path required error, got: %v", err)
+	}
+}
+
+func TestLoad_UnsupportedExtension(t *testing.T) {
+	_, err := Load[testConfig]("config.xml")
+	if err == nil || !strings.Contains(err.Error(), "unsupported file extension") {
+		t.Errorf("expected unsupported extension error, got: %v", err)
+	}
+}
+
+func TestLoad_NoExtension(t *testing.T) {
+	_, err := Load[testConfig]("config")
+	if err == nil || !strings.Contains(err.Error(), "unsupported file extension") {
+		t.Errorf("expected unsupported extension error, got: %v", err)
+	}
+}
+
+func TestLoad_FileNotFound(t *testing.T) {
+	cleanup := setupTempDir(t)
+	defer cleanup()
+
+	_, err := Load[testConfig]("nonexistent.json")
+	if err == nil || !strings.Contains(err.Error(), "failed to read config") {
+		t.Errorf("expected file not found error, got: %v", err)
+	}
+}
+
+func TestLoad_DirectoryTraversal(t *testing.T) {
+	cleanup := setupTempDir(t)
+	defer cleanup()
+
+	_, err := Load[testConfig]("../config.json")
+	if err == nil || !strings.Contains(err.Error(), "invalid path") {
+		t.Errorf("expected traversal error, got: %v", err)
+	}
+}
+
+func TestLoad_InvalidJSON(t *testing.T) {
+	cleanup := setupTempDir(t)
+	defer cleanup()
+
+	writeFile(t, "bad.json", `{invalid json}`)
+	_, err := Load[testConfig]("bad.json")
+	if err == nil || !strings.Contains(err.Error(), "failed to unmarshal json") {
+		t.Errorf("expected unmarshal error, got: %v", err)
+	}
+}
+
+func TestLoad_InvalidYAML(t *testing.T) {
+	cleanup := setupTempDir(t)
+	defer cleanup()
+
+	writeFile(t, "bad.yaml", "invalid: yaml: content")
+	_, err := Load[testConfig]("bad.yaml")
+	if err == nil || !strings.Contains(err.Error(), "failed to unmarshal yaml") {
+		t.Errorf("expected unmarshal error, got: %v", err)
+	}
+}
+
+func TestLoad_ValidationFailed_MissingRequired(t *testing.T) {
+	cleanup := setupTempDir(t)
+	defer cleanup()
+
+	writeFile(t, "missing.yaml", "port: 8080\ndebug: true")
+	_, err := Load[testConfig]("missing.yaml")
+	if err == nil || !strings.Contains(err.Error(), "config validation failed") {
+		t.Errorf("expected validation error, got: %v", err)
+	}
+}
+
+func TestLoad_ValidationFailed_PortOutOfRange(t *testing.T) {
+	cleanup := setupTempDir(t)
+	defer cleanup()
+
+	writeFile(t, "bigport.yaml", "database_url: pg://localhost\nport: 70000")
+	_, err := Load[testConfig]("bigport.yaml")
+	if err == nil || !strings.Contains(err.Error(), "config validation failed") {
+		t.Errorf("expected validation error, got: %v", err)
+	}
+}
+
+func TestLoad_PortBoundary(t *testing.T) {
+	cleanup := setupTempDir(t)
+	defer cleanup()
+
+	// Max
+	writeFile(t, "max.yaml", "database_url: pg://x\nport: 65535")
+	cfg, err := Load[testConfig]("max.yaml")
+	if err != nil {
+		t.Fatalf("max port should pass: %v", err)
+	}
+	if cfg.Port != 65535 {
+		t.Errorf("port = %d", cfg.Port)
+	}
+
+	// Min
+	writeFile(t, "min.yaml", "database_url: pg://x\nport: 1")
+	cfg, err = Load[testConfig]("min.yaml")
+	if err != nil {
+		t.Fatalf("min port should pass: %v", err)
+	}
+	if cfg.Port != 1 {
+		t.Errorf("port = %d", cfg.Port)
+	}
+}
+
+// ============================================================================
+// Load — nested validation
+// ============================================================================
+
+func TestLoad_NestedValidation(t *testing.T) {
+	type server struct {
+		Port int    `yaml:"port" validate:"required,min=1,max=65535"`
+		Host string `yaml:"host" validate:"required"`
+	}
+	type app struct {
+		Server server `yaml:"server"`
+	}
+
+	cleanup := setupTempDir(t)
+	defer cleanup()
+
+	// Valid
+	writeFile(t, "valid.yaml", "server:\n  port: 8080\n  host: localhost")
+	cfg, err := Load[app]("valid.yaml")
+	if err != nil {
+		t.Fatalf("valid nested: %v", err)
+	}
+	if cfg.Server.Port != 8080 || cfg.Server.Host != "localhost" {
+		t.Errorf("got %+v", cfg.Server)
+	}
+
+	// Invalid — missing host
+	writeFile(t, "bad.yaml", "server:\n  port: 8080")
+	_, err = Load[app]("bad.yaml")
+	if err == nil || !strings.Contains(err.Error(), "config validation failed") {
+		t.Errorf("expected validation error, got: %v", err)
+	}
+}
+
+// ============================================================================
+// MustLoad
+// ============================================================================
+
+func TestMustLoad_Success(t *testing.T) {
+	cleanup := setupTempDir(t)
+	defer cleanup()
+
+	writeFile(t, "ok.yaml", "database_url: pg://x\nport: 8080")
 	defer func() {
-		if err := os.Chdir(originalDir); err != nil {
-			t.Fatalf("Failed to change back to original directory: %v", err)
+		if r := recover(); r != nil {
+			t.Fatalf("should not panic: %v", r)
 		}
 	}()
 
-	if err := os.Chdir(tempDir); err != nil {
-		t.Fatalf("Failed to change to temp directory: %v", err)
+	cfg := MustLoad[testConfig]("ok.yaml")
+	if cfg.Port != 8080 {
+		t.Errorf("port = %d", cfg.Port)
 	}
+}
 
-	// Create config directory
-	if err := os.Mkdir("config", 0755); err != nil {
-		t.Fatalf("Failed to create config directory: %v", err)
+func TestMustLoad_Panics_FileNotFound(t *testing.T) {
+	cleanup := setupTempDir(t)
+	defer cleanup()
+
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("expected panic")
+		}
+	}()
+
+	MustLoad[testConfig]("nonexistent.yaml")
+}
+
+func TestMustLoad_Panics_ValidationFailed(t *testing.T) {
+	cleanup := setupTempDir(t)
+	defer cleanup()
+
+	writeFile(t, "bad.yaml", "database_url: pg://x\nport: 99999")
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("expected panic on validation failure")
+		}
+	}()
+
+	MustLoad[testConfig]("bad.yaml")
+}
+
+// ============================================================================
+// unmarshal
+// ============================================================================
+
+func TestUnmarshal_JSON(t *testing.T) {
+	var cfg testConfig
+	err := unmarshal([]byte(`{"database_url":"pg","port":8080}`), ExtensionJSON, &cfg)
+	if err != nil {
+		t.Fatalf("json unmarshal: %v", err)
 	}
-
-	// Test data
-	testConfig := TestConfig{
-		DatabaseURL: "postgres://localhost:5432/testdb",
-		Port:        8080,
-		Debug:       true,
+	if cfg.Port != 8080 {
+		t.Errorf("port = %d", cfg.Port)
 	}
+}
 
-	tests := []struct {
-		name        string
-		path        string
-		content     string
-		wantErr     bool
-		errContains string
-		setup       func() error
+func TestUnmarshal_YAML(t *testing.T) {
+	var cfg testConfig
+	err := unmarshal([]byte("database_url: pg\nport: 8080"), ExtensionYAML, &cfg)
+	if err != nil {
+		t.Fatalf("yaml unmarshal: %v", err)
+	}
+	if cfg.Port != 8080 {
+		t.Errorf("port = %d", cfg.Port)
+	}
+}
+
+func TestUnmarshal_YML(t *testing.T) {
+	var cfg testConfig
+	err := unmarshal([]byte("database_url: pg\nport: 3000"), ExtensionYML, &cfg)
+	if err != nil {
+		t.Fatalf("yml unmarshal: %v", err)
+	}
+	if cfg.Port != 3000 {
+		t.Errorf("port = %d", cfg.Port)
+	}
+}
+
+func TestUnmarshal_Unsupported(t *testing.T) {
+	var cfg testConfig
+	err := unmarshal([]byte("data"), "xml", &cfg)
+	if err == nil || !strings.Contains(err.Error(), "unsupported") {
+		t.Errorf("expected unsupported error, got: %v", err)
+	}
+}
+
+func TestUnmarshal_InvalidJSON(t *testing.T) {
+	var cfg testConfig
+	err := unmarshal([]byte(`{bad}`), ExtensionJSON, &cfg)
+	if err == nil {
+		t.Error("expected error for invalid JSON")
+	}
+}
+
+func TestUnmarshal_InvalidYAML(t *testing.T) {
+	var cfg testConfig
+	err := unmarshal([]byte("a: b: c"), ExtensionYAML, &cfg)
+	if err == nil {
+		t.Error("expected error for invalid YAML")
+	}
+}
+
+// ============================================================================
+// validExts
+// ============================================================================
+
+func TestValidExts(t *testing.T) {
+	cases := []struct {
+		ext  string
+		want bool
 	}{
-		{
-			name:    "valid JSON config should parse successfully",
-			path:    "config.json",
-			content: `{"database_url":"postgres://localhost:5432/testdb","port":8080,"debug":true}`,
-			wantErr: false,
-			setup: func() error {
-				return os.WriteFile("config.json", []byte(`{"database_url":"postgres://localhost:5432/testdb","port":8080,"debug":true}`), 0644)
-			},
-		},
-		{
-			name:    "valid YAML config should parse successfully",
-			path:    "config.yaml",
-			content: "database_url: postgres://localhost:5432/testdb\nport: 8080\ndebug: true",
-			wantErr: false,
-			setup: func() error {
-				return os.WriteFile("config.yaml", []byte("database_url: postgres://localhost:5432/testdb\nport: 8080\ndebug: true"), 0644)
-			},
-		},
-		{
-			name:    "valid YML config should parse successfully",
-			path:    "config.yml",
-			content: "database_url: postgres://localhost:5432/testdb\nport: 8080\ndebug: true",
-			wantErr: false,
-			setup: func() error {
-				return os.WriteFile("config.yml", []byte("database_url: postgres://localhost:5432/testdb\nport: 8080\ndebug: true"), 0644)
-			},
-		},
-		{
-			name:        "empty path should return error",
-			path:        "",
-			wantErr:     true,
-			errContains: "config path is required",
-		},
-		{
-			name:        "unsupported extension should return error",
-			path:        "config.xml",
-			wantErr:     true,
-			errContains: "unsupported file extension: xml",
-		},
-		{
-			name:        "non-existent file should return error",
-			path:        "nonexistent.json",
-			wantErr:     true,
-			errContains: "no such file or directory",
-		},
-		{
-			name:        "invalid JSON should return error",
-			path:        "invalid.json",
-			wantErr:     true,
-			errContains: "failed to unmarshal json",
-			setup: func() error {
-				return os.WriteFile("invalid.json", []byte(`{"invalid": json}`), 0644)
-			},
-		},
-		{
-			name:        "invalid YAML should return error",
-			path:        "invalid.yaml",
-			wantErr:     true,
-			errContains: "failed to unmarshal yaml",
-			setup: func() error {
-				return os.WriteFile("invalid.yaml", []byte("invalid: yaml: content"), 0644)
-			},
-		},
-		{
-			name:        "directory traversal should return error",
-			path:        "../config.json",
-			wantErr:     true,
-			errContains: "invalid path",
-		},
-		{
-			name:        "absolute path should return error",
-			path:        "/etc/passwd",
-			wantErr:     true,
-			errContains: "unsupported file extension",
-		},
+		{ExtensionJSON, true},
+		{ExtensionYAML, true},
+		{ExtensionYML, true},
+		{"xml", false},
+		{"txt", false},
+		{"", false},
+		{"JSON", false},
 	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Setup
-			if tt.setup != nil {
-				if err := tt.setup(); err != nil {
-					t.Fatalf("Setup failed: %v", err)
-				}
-			}
-
-			// Execute
-			var config TestConfig
-			result, err := ParseConfig(tt.path, &config)
-
-			// Verify error expectation
-			if (err != nil) != tt.wantErr {
-				t.Errorf("Error expectation mismatch: got err=%v, wantErr=%v", err, tt.wantErr)
-				return
-			}
-
-			if tt.wantErr {
-				if err != nil && tt.errContains != "" && !contains(err.Error(), tt.errContains) {
-					t.Errorf("Error message = %v, want to contain %v", err.Error(), tt.errContains)
-				}
-				if result != nil {
-					t.Error("Expected nil result for error case")
-				}
-			} else {
-				if err != nil {
-					t.Errorf("Unexpected error: %v", err)
-				}
-				if result == nil {
-					t.Error("Expected non-nil result for success case")
-				}
-				if result != nil && *result != testConfig {
-					t.Errorf("ParseConfig() = %v, want %v", *result, testConfig)
-				}
-			}
-		})
-	}
-}
-
-func TestGetConfigPathFromEnv(t *testing.T) {
-	tests := []struct {
-		name     string
-		env      string
-		ext      []string
-		expected string
-	}{
-		{
-			name:     "qc environment with default extension should return qc config path",
-			env:      EnvQC,
-			ext:      []string{},
-			expected: "./config/config.qc.json",
-		},
-		{
-			name:     "staging environment with yaml extension should return staging yaml config path",
-			env:      EnvStaging,
-			ext:      []string{"yaml"},
-			expected: "./config/config.staging.yaml",
-		},
-		{
-			name:     "production environment with yml extension should return production yml config path",
-			env:      EnvProduction,
-			ext:      []string{"yml"},
-			expected: "./config/config.production.yml",
-		},
-		{
-			name:     "local environment with json extension should return local json config path",
-			env:      EnvLocal,
-			ext:      []string{"json"},
-			expected: "./config/config.local.json",
-		},
-		{
-			name:     "unknown environment should return default config path",
-			env:      "unknown",
-			ext:      []string{},
-			expected: "./config/config.local.json",
-		},
-		{
-			name:     "empty environment should return default config path",
-			env:      "",
-			ext:      []string{},
-			expected: "./config/config.local.json",
-		},
-		{
-			name:     "environment with empty extension should use default extension",
-			env:      EnvQC,
-			ext:      []string{""},
-			expected: "./config/config.qc.json",
-		},
-		{
-			name:     "environment with multiple extensions should use first one",
-			env:      EnvStaging,
-			ext:      []string{"yaml", "json"},
-			expected: "./config/config.staging.yaml",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := GetConfigPathFromEnv(tt.env, tt.ext...)
-			if result != tt.expected {
-				t.Errorf("GetConfigPathFromEnv() = %v, want %v", result, tt.expected)
-			}
-		})
-	}
-}
-
-func TestIsValidExtension(t *testing.T) {
-	tests := []struct {
-		name     string
-		ext      string
-		expected bool
-	}{
-		{"json extension should be valid", ExtensionJSON, true},
-		{"yaml extension should be valid", ExtensionYAML, true},
-		{"yml extension should be valid", ExtensionYML, true},
-		{"xml extension should be invalid", "xml", false},
-		{"txt extension should be invalid", "txt", false},
-		{"empty extension should be invalid", "", false},
-		{"uppercase JSON should be invalid", "JSON", false},
-		{"mixed case yaml should be invalid", "YaMl", false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := isValidExtension(tt.ext)
-			if result != tt.expected {
-				t.Errorf("isValidExtension(%s) = %v, want %v", tt.ext, result, tt.expected)
-			}
-		})
-	}
-}
-
-func TestUnmarshalConfig(t *testing.T) {
-	testData := []byte(`{"database_url":"postgres://localhost:5432/testdb","port":8080,"debug":true}`)
-	yamlData := []byte("database_url: postgres://localhost:5432/testdb\nport: 8080\ndebug: true")
-
-	tests := []struct {
-		name        string
-		data        []byte
-		ext         string
-		wantErr     bool
-		errContains string
-	}{
-		{
-			name:    "valid JSON data should unmarshal successfully",
-			data:    testData,
-			ext:     ExtensionJSON,
-			wantErr: false,
-		},
-		{
-			name:    "valid YAML data should unmarshal successfully",
-			data:    yamlData,
-			ext:     ExtensionYAML,
-			wantErr: false,
-		},
-		{
-			name:    "valid YML data should unmarshal successfully",
-			data:    yamlData,
-			ext:     ExtensionYML,
-			wantErr: false,
-		},
-		{
-			name:        "unsupported extension should return error",
-			data:        testData,
-			ext:         "xml",
-			wantErr:     true,
-			errContains: "unsupported file extension: xml",
-		},
-		{
-			name:        "invalid JSON data should return error",
-			data:        []byte(`{"invalid": json}`),
-			ext:         ExtensionJSON,
-			wantErr:     true,
-			errContains: "unexpected end of JSON input",
-		},
-		{
-			name:        "invalid YAML data should return error",
-			data:        []byte("invalid: yaml: content"),
-			ext:         ExtensionYAML,
-			wantErr:     true,
-			errContains: "mapping values are not allowed",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			var config TestConfig
-			err := unmarshalConfig(tt.data, tt.ext, &config)
-
-			if (err != nil) != tt.wantErr {
-				t.Errorf("Error expectation mismatch: got err=%v, wantErr=%v", err, tt.wantErr)
-				return
-			}
-
-			if tt.wantErr {
-				if err != nil && tt.errContains != "" && !contains(err.Error(), tt.errContains) {
-					t.Errorf("Error message = %v, want to contain %v", err.Error(), tt.errContains)
-				}
-			} else {
-				if err != nil {
-					t.Errorf("Unexpected error: %v", err)
-				}
-			}
-		})
-	}
-}
-
-// Helper function to check if a string contains a substring
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(substr) == 0 ||
-		(len(s) > len(substr) && (s[:len(substr)] == substr ||
-			s[len(s)-len(substr):] == substr ||
-			containsSubstring(s, substr))))
-}
-
-// Helper function to check substring containment
-func containsSubstring(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
+	for _, c := range cases {
+		if got := validExts[c.ext]; got != c.want {
+			t.Errorf("validExts[%q] = %v, want %v", c.ext, got, c.want)
 		}
 	}
-	return false
 }
