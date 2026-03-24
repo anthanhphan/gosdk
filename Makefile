@@ -6,13 +6,15 @@ COVER_HTML := $(REPORT_DIR)/coverage.html
 SECURITY_JSON := $(REPORT_DIR)/security-report.json
 
 # Tools
-GOLANGCI_LINT ?= golangci-lint
-GOSEC ?= gosec
-GOVULNCHECK ?= govulncheck
-STATICCHECK ?= staticcheck
-INEFFASSIGN ?= ineffassign
-MISSPELL ?= misspell
-GOCYCLO ?= gocyclo
+GOBIN := $(shell go env GOPATH)/bin
+GOLANGCI_LINT ?= $(GOBIN)/golangci-lint
+GOSEC ?= $(GOBIN)/gosec
+GOVULNCHECK ?= $(GOBIN)/govulncheck
+STATICCHECK ?= $(GOBIN)/staticcheck
+INEFFASSIGN ?= $(GOBIN)/ineffassign
+MISSPELL ?= $(GOBIN)/misspell
+GOCYCLO ?= $(GOBIN)/gocyclo
+GOIMPORTS ?= $(GOBIN)/goimports
 
 .PHONY: all
 all: tidy fmt imports lint vet staticcheck ineffassign misspell cyclo test_race test_coverage security_scan vul
@@ -44,7 +46,7 @@ fmt:
 
 imports:
 	@echo "Organizing imports..."
-	@goimports -w .
+	@$(GOIMPORTS) -w .
 
 tidy:
 	@echo "Running go mod tidy..."
@@ -116,7 +118,7 @@ cyclo:
 security_scan:
 	@echo "Running gosec security scan..."
 	@mkdir -p $(REPORT_DIR)
-	@$(GOSEC) -fmt json -out $(SECURITY_JSON) ./...
+	@$(GOSEC) -fmt json -out $(SECURITY_JSON) -exclude-generated ./...
 	@echo "Security report generated at: $(SECURITY_JSON)"
 
 vul:
