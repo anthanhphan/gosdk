@@ -1,6 +1,6 @@
-# Routine Package
+# Goroutine Package
 
-A safe goroutine management package for Go applications that provides panic recovery with accurate location tracking and dynamic function invocation with automatic type conversion. Built with best practices for production-ready applications.
+Production-ready concurrency patterns for Go with panic recovery, context cancellation, timeout support, and goroutine leak prevention.
 
 ## Installation
 
@@ -8,283 +8,247 @@ A safe goroutine management package for Go applications that provides panic reco
 go get github.com/anthanhphan/gosdk/goroutine
 ```
 
-## Quick Start
+## Patterns
+
+| Pattern | Use case | Key feature |
+|---|---|---|
+| [`Run`](#run) | Fire-and-forget goroutine | Fast paths for common signatures |
+| [`RunWithContext`](#runwithcontext) | Context-aware goroutine | Prevents goroutine leaks |
+| [`RunWithTimeout`](#runwithtimeout) | Goroutine with deadline | Auto-cancel + leak detection |
+| [`Group`](#group) | Run N tasks, wait for all | First-error + context cancel |
+| [`WorkerPool`](#workerpool) | Fixed workers + job queue | Graceful shutdown, job timeout |
+| [`FanOut`](#fanout) | Parallel map with ordered results | Generic `[T, R]` |
+| [`ForEach`](#foreach) | Parallel side-effects | Generic `[T]` |
+
+All patterns include **panic recovery** — panics never crash your application.
+
+---
+
+## Run
+
+Starts a goroutine with automatic panic recovery and location tracking.
+
+For `func()`, `func(string)`, `func(int)`, `func(error)` — reflect is bypassed entirely.
 
 ```go
-package main
-
-import (
-	"time"
-
-	routine "github.com/anthanhphan/gosdk/goroutine"
-	"github.com/anthanhphan/gosdk/logger"
-)
-
-func main() {
-	// Initialize logger
-	undo := logger.InitDefaultLogger()
-	defer undo()
-
-	// Run a simple function in a goroutine
-	routine.Run(func(msg string) {
-		logger.Info("Message:", msg)
-	}, "Hello, world!")
-
-	// Panic recovery demonstration
-	routine.Run(func() {
-		panic("This panic will be recovered and logged with location")
-	})
-
-	time.Sleep(100 * time.Millisecond)
-}
-```
-
-## Features
-
-- **Panic Recovery**: Automatic panic recovery and logging with accurate panic location tracking
-- **Dynamic Invocation**: Use reflection to invoke functions with any signature
-- **Type Safety**: Automatic type conversion and validation for compatible types
-- **Error Logging**: Structured logging for all errors and panics with location information
-- **Production Ready**: Follows Go best practices and conventions
-
-## API Reference
-
-### Run
-
-Starts a new goroutine and invokes the provided function with the given arguments. Any panic that occurs within the goroutine is automatically recovered and logged with the exact panic location.
-
-```go
-func Run(fn any, args ...any)
-```
-
-**Parameters:**
-
-- `fn`: The function to be invoked in the new goroutine. Must be a valid function type.
-- `args`: Variadic list of arguments to pass to the invoked function.
-
-**Output:**
-
-- None (function executes asynchronously in a goroutine)
-
-**Example:**
-
-```go
-// Function with string argument
 routine.Run(func(msg string) {
-	logger.Info("Message:", msg)
+    logger.Info("Message:", msg)
 }, "Hello, world!")
 
-// Function with multiple arguments
-routine.Run(func(a, b int) {
-	logger.Infof("Sum: %d", a+b)
-}, 10, 20)
-
-// Function with no arguments
 routine.Run(func() {
-	logger.Info("Running in background")
-})
-
-// Panic recovery - automatically logged with location
-routine.Run(func() {
-	panic("something went wrong")
-})
-// Output: {"level":"error","msg":"panic recovered in goroutine","error":"something went wrong","panic_at":"file.go:123"}
-```
-
-## Usage Examples
-
-### Basic Background Task
-
-```go
-routine.Run(func() {
-	// Long-running background task
-	for {
-		// Do work
-		time.Sleep(1 * time.Second)
-	}
+    panic("recovered and logged with panic_at location")
 })
 ```
 
-### Task with Arguments
+> [!WARNING]
+> `Run` provides **no timeout or cancellation**. The goroutine runs until `fn` completes.
+> For production use with external calls (API, DB, gRPC), use `RunWithContext` or `RunWithTimeout`.
+
+---
+
+## RunWithContext
+
+Starts a goroutine that receives a context. When the context is cancelled, the function should observe `ctx.Done()` and return — preventing goroutine leaks.
 
 ```go
-routine.Run(func(userID int, message string) {
-	logger.Infow("Sending notification",
-		"user_id", userID,
-		"message", message,
-	)
-}, 12345, "Welcome to our service!")
+ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+defer cancel()
+
+routine.RunWithContext(ctx, func(ctx context.Context) {
+    resp, err := httpClient.Do(req.WithContext(ctx))
+    // Context cancellation aborts the HTTP request
+})
 ```
 
-### Concurrent Processing
+**Multiple goroutines sharing one cancel:**
 
 ```go
-items := []string{"item1", "item2", "item3"}
+ctx, cancel := context.WithCancel(context.Background())
+for _, id := range userIDs {
+    routine.RunWithContext(ctx, func(ctx context.Context) {
+        fetchUser(ctx, id)
+    })
+}
+// cancel() stops all goroutines
+```
 
-for _, item := range items {
-	item := item // Capture loop variable
-	routine.Run(func(i string) {
-		logger.Infow("Processing item", "item", i)
-		// Process item
-	}, item)
+---
+
+## RunWithTimeout
+
+Starts a goroutine with an automatic deadline. Returns a `CancelFunc` for early cancellation.
+
+If the function does not complete within the timeout, the context is cancelled and a warning is logged.
+
+```go
+cancel := routine.RunWithTimeout(5*time.Second, func(ctx context.Context) {
+    // ctx will be cancelled after 5 seconds
+    resp, err := httpClient.Do(req.WithContext(ctx))
+})
+defer cancel() // optional: cancel early if no longer needed
+```
+
+**Timeout reached — warning logged:**
+
+```json
+{
+  "level": "warn",
+  "msg": "goroutine timed out",
+  "timeout": "5s"
 }
 ```
 
-### Panic Recovery with Location Tracking
+**Early cancel:**
 
 ```go
-// Panic will be automatically recovered and logged with accurate location
-routine.Run(func() {
-	// Your code that might panic
-	panic("something went wrong")
+cancel := routine.RunWithTimeout(30*time.Second, func(ctx context.Context) {
+    <-ctx.Done() // exits when cancel() is called
 })
-
-// The panic is recovered by the package with location information:
-// {"level":"error","msg":"panic recovered in goroutine","error":"something went wrong","panic_at":"file.go:123"}
-// Your application continues running safely
+cancel() // no need to wait 30s
 ```
 
-## Advanced Features
+---
 
-### Type Conversion
+## Group
 
-The package automatically handles type conversion for compatible types:
+Run multiple goroutines and wait for all to complete. Collects the first error, optionally cancels the context on failure.
 
 ```go
-// int to int32
-routine.Run(func(n int32) {
-	logger.Infof("Number: %d", n)
-}, 10) // int(10) is converted to int32
-
-// int to int64
-routine.Run(func(n int64) {
-	logger.Infof("Number: %d", n)
-}, 10) // int(10) is converted to int64
-
-// uint to int
-routine.Run(func(n int) {
-	logger.Infof("Number: %d", n)
-}, uint(10)) // uint(10) is converted to int
+g := routine.NewGroupWithContext(ctx)
+g.Go(func(ctx context.Context) error { return fetchUsers(ctx) })
+g.Go(func(ctx context.Context) error { return fetchOrders(ctx) })
+err := g.Wait() // first error cancels the other
 ```
 
-### Invalid Function Handling
-
-If an invalid function is provided, an error is logged but the application continues:
+### With concurrency limit
 
 ```go
-// This will log an error but not panic
-routine.Run("not a function", "arg1", "arg2")
+g := routine.NewGroupWithLimit(ctx, 5) // max 5 concurrent goroutines
+for _, id := range userIDs {
+    id := id
+    g.Go(func(ctx context.Context) error {
+        return processUser(ctx, id)
+    })
+}
+err := g.Wait()
 ```
 
-### Argument Validation
+### API
 
-The package validates argument count and types:
+| Function | Description |
+|---|---|
+| `NewGroup()` | No limit, background context |
+| `NewGroupWithContext(ctx)` | Cancel on first error |
+| `NewGroupWithLimit(ctx, n)` | Cancel + concurrency limit |
+| `g.Go(fn)` | Add a goroutine (blocks if limit reached) |
+| `g.Wait() error` | Wait for all, return first error |
+
+---
+
+## WorkerPool
+
+Fixed pool of worker goroutines processing jobs from a queue.
 
 ```go
-// Insufficient arguments - error logged
-routine.Run(func(a, b int) {
-	// ...
-}, 10) // Missing second argument
-// Error: "insufficient arguments: expected 2, got 1"
+pool := routine.NewWorkerPool(routine.PoolConfig{
+    Workers:   10,
+    QueueSize: 100,
+})
+pool.Start(ctx)
 
-// Type mismatch - error logged
-routine.Run(func(s string) {
-	// ...
-}, 123) // int cannot be converted to string
-// Error: "type mismatch at index 0: expected string, got int"
+pool.Submit(func() { processItem(item) })
 
-// Excess arguments - warning logged, function still executes
-routine.Run(func(a int) {
-	// ...
-}, 10, 20, 30) // Excess arguments logged as warning
+pool.Stop() // graceful: cancels context, drains queue, waits for workers
 ```
 
-### Nil Pointer Arguments
-
-Nil values are properly handled for pointer and interface types:
+### Job-level timeout
 
 ```go
-// Nil pointer argument
-routine.Run(func(s *string) {
-	if s == nil {
-		logger.Info("Received nil pointer")
-	}
-}, nil)
-
-// Nil interface argument
-routine.Run(func(v interface{}) {
-	if v == nil {
-		logger.Info("Received nil interface")
-	}
-}, nil)
+pool.SubmitWithTimeout(5*time.Second, func(ctx context.Context) {
+    // ctx is cancelled after 5s OR when pool.Stop() is called
+    resp, err := httpClient.Do(req.WithContext(ctx))
+})
 ```
 
-## Integration with Logger
+### API
 
-The routine package uses the logger package for structured logging. Make sure to initialize the logger before using the routine package:
+| Function | Description |
+|---|---|
+| `NewWorkerPool(config)` | Create pool (Workers defaults to 1) |
+| `pool.Start(ctx)` | Launch workers (idempotent) |
+| `pool.Submit(fn) bool` | Enqueue (blocks if full, false if stopped) |
+| `pool.TrySubmit(fn) bool` | Enqueue non-blocking (false if full/stopped) |
+| `pool.SubmitWithTimeout(d, fn) bool` | Enqueue with job-level timeout |
+| `pool.Stop()` | Graceful shutdown (idempotent) |
+| `pool.Running() int` | Workers currently executing |
+| `pool.Pending() int` | Jobs waiting in queue |
+
+---
+
+## FanOut
+
+Process a slice in parallel and return **ordered results**. `output[i]` corresponds to `input[i]`.
 
 ```go
-import (
-	routine "github.com/anthanhphan/gosdk/goroutine"
-	"github.com/anthanhphan/gosdk/logger"
+results, err := routine.FanOut(ctx, userIDs, 5,
+    func(ctx context.Context, id string) (User, error) {
+        return fetchUser(ctx, id)
+    },
 )
-
-func main() {
-	// Initialize logger
-	undo := logger.InitDefaultLogger()
-	defer undo()
-
-	// Now you can use routine package
-	routine.Run(func() {
-		logger.Info("Running in goroutine")
-	})
-}
 ```
 
-## Panic Location Tracking
+- `workers` is capped at `len(items)`. If `<= 0`, defaults to `1`.
+- Returns the first error. Partial results are still available.
+- Panics are recovered and returned as errors.
+- Context cancellation stops processing.
 
-The package automatically captures and logs the exact location where a panic occurs:
+---
+
+## ForEach
+
+Process a slice in parallel for **side-effects only** (no return values).
 
 ```go
-routine.Run(func() {
-	panic("critical error")
-})
-
-// Log output includes panic location:
-// {
-//   "level": "error",
-//   "ts": "2025-11-02T...",
-//   "caller": "goroutine/routine.go:401",
-//   "msg": "panic recovered in goroutine",
-//   "prefix": "routine::recoverPanic",
-//   "error": "critical error",
-//   "panic_at": "user/app.go:42"
-// }
+err := routine.ForEach(ctx, emails, 10,
+    func(ctx context.Context, email string) error {
+        return sendEmail(ctx, email)
+    },
+)
 ```
 
-The `panic_at` field shows the exact file and line number where the panic occurred in your code, making debugging much easier.
+---
 
-## Best Practices
+## Production Safety
 
-1. **Initialize logger**: Make sure to initialize the logger before using the routine package
-2. **Use structured logging**: The package uses structured logging with panic location tracking
-3. **Avoid passing nil functions**: Always validate function parameters before calling `Run`
-4. **Capture loop variables**: When using loops with goroutines, capture loop variables properly
-5. **Handle panics gracefully**: Panics are automatically recovered, but design your code to avoid panics when possible
-6. **Type compatibility**: Ensure argument types are compatible or convertible to function parameter types
-7. **Error handling**: Check argument validation errors in logs for debugging
+| Feature | Details |
+|---|---|
+| **Panic recovery** | All patterns recover panics — logged with source location |
+| **Context propagation** | `RunWithContext`, `Group`, `WorkerPool`, `FanOut` all respect `ctx.Done()` |
+| **Timeout support** | `RunWithTimeout`, `SubmitWithTimeout` auto-cancel after deadline |
+| **Goroutine leak prevention** | Context cancellation signals goroutines to exit |
+| **Graceful shutdown** | `WorkerPool.Stop()` cancels ctx → drains queue → waits for workers |
+| **Idempotent operations** | `Start()`, `Stop()`, `cancel()` are safe to call multiple times |
+| **Race-safe** | All shared state protected by atomics or mutexes |
 
-## Performance Considerations
+## File Structure
 
-- The package uses reflection for dynamic function invocation, which has a small performance overhead
-- For high-performance scenarios, consider using direct goroutine calls if you don't need panic recovery
-- Stack trace parsing uses a pool of buffers to minimize allocations
-- Panic location extraction filters out wrapper and runtime frames efficiently
-- Type conversion is performed at runtime, so ensure types are compatible for best performance
+```
+goroutine/
+├── run.go       — Run, RunWithContext, RunWithTimeout
+├── recover.go   — Panic recovery + logger
+├── invoke.go    — Reflect-based invocation
+├── stack.go     — Stack trace parser + caller location
+├── group.go     — Group pattern
+├── worker.go    — WorkerPool + SubmitWithTimeout
+├── pipeline.go  — FanOut / ForEach
+└── docs/
+    ├── README.md
+    └── example/main.go
+```
 
 ## Examples
 
-See the [example directory](./example/main.go) for complete working examples demonstrating all features of the package.
+See [`docs/example/main.go`](./example/main.go) for complete working examples covering all patterns.
 
 ## License
 

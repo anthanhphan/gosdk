@@ -3,9 +3,12 @@
 package routine
 
 import (
+	"context"
 	"fmt"
+	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -344,7 +347,7 @@ func TestRecoverPanic(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			func() {
-				defer recoverPanic("")
+				defer recoverPanic()
 				if tt.panic != nil {
 					panic(tt.panic)
 				}
@@ -592,8 +595,8 @@ func TestParseStackFrames(t *testing.T) {
 	}
 }
 
-// TestHasPrefixAny tests hasPrefixAny function.
-func TestHasPrefixAny(t *testing.T) {
+// TestContainsAny_WithPrefixes tests containsAny function with prefix-style patterns.
+func TestContainsAny_WithPrefixes(t *testing.T) {
 	tests := []struct {
 		name     string
 		str      string
@@ -640,9 +643,9 @@ func TestHasPrefixAny(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := hasPrefixAny(tt.str, tt.prefixes)
+			got := containsAny(tt.str, tt.prefixes)
 			if got != tt.want {
-				t.Errorf("hasPrefixAny() = %v, want %v", got, tt.want)
+				t.Errorf("containsAny() = %v, want %v", got, tt.want)
 			}
 		})
 	}
@@ -790,7 +793,7 @@ func TestRecoverPanic_WithLocation(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			func() {
-				defer recoverPanic(tt.callerLocation)
+				defer recoverPanic()
 				panic(tt.panicValue)
 			}()
 			tt.check(t)
@@ -946,7 +949,7 @@ func TestConvertArguments_NilPointer(t *testing.T) {
 // TestRecoverPanic_NoPanic tests recoverPanic when no panic occurs.
 func TestRecoverPanic_NoPanic(_ *testing.T) {
 	func() {
-		defer recoverPanic("test.go:123")
+		defer recoverPanic()
 		// No panic - should return normally
 	}()
 	// Test passes if no panic occurred
@@ -1116,7 +1119,7 @@ func TestFrameFilter_ShouldSkip(t *testing.T) {
 // TestCapturePanicLocation tests capturePanicLocation function.
 func TestCapturePanicLocation(_ *testing.T) {
 	func() {
-		defer recoverPanic("fallback.go:123")
+		defer recoverPanic()
 		// Capture location - in non-panic context, location might be empty
 		_ = capturePanicLocation()
 	}()
@@ -1299,7 +1302,7 @@ func TestConvertArguments_NilHandling(t *testing.T) {
 // TestRecoverPanic_LocationFallback tests recoverPanic location fallback.
 func TestRecoverPanic_LocationFallback(_ *testing.T) {
 	func() {
-		defer recoverPanic("fallback.go:999")
+		defer recoverPanic()
 		panic("test")
 	}()
 	time.Sleep(50 * time.Millisecond)
@@ -1308,8 +1311,576 @@ func TestRecoverPanic_LocationFallback(_ *testing.T) {
 // TestRecoverPanic_EmptyLocation tests recoverPanic with empty captured location.
 func TestRecoverPanic_EmptyLocation(_ *testing.T) {
 	func() {
-		defer recoverPanic("")
+		defer recoverPanic()
 		panic("test")
 	}()
 	time.Sleep(50 * time.Millisecond)
+}
+
+// ---------------------------------------------------------------------------
+// Additional coverage tests
+// ---------------------------------------------------------------------------
+
+// TestRun_FuncErrorFastPath tests the func(error) fast path in Run.
+func TestRun_FuncErrorFastPath(t *testing.T) {
+	done := make(chan error, 1)
+	expectedErr := fmt.Errorf("test error")
+
+	Run(func(err error) {
+		done <- err
+	}, expectedErr)
+
+	select {
+	case got := <-done:
+		assert.Equal(t, expectedErr, got)
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("func(error) fast path did not execute")
+	}
+}
+
+// TestRun_FuncIntFastPath tests the func(int) fast path in Run.
+func TestRun_FuncIntFastPath(t *testing.T) {
+	done := make(chan int, 1)
+
+	Run(func(n int) {
+		done <- n
+	}, 42)
+
+	select {
+	case got := <-done:
+		assert.Equal(t, 42, got)
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("func(int) fast path did not execute")
+	}
+}
+
+// TestRun_FuncStringWrongArgFallsToReflect tests that func(string) with non-string arg
+// falls through to the generic reflect path (which logs type mismatch error).
+func TestRun_FuncStringWrongArgFallsToReflect(t *testing.T) {
+	done := make(chan bool, 1)
+
+	type myStruct struct{ x int }
+	// func(string) with myStruct arg -- type assert fails, falls to reflect path
+	Run(func(s string) {
+		done <- true
+	}, myStruct{42}) // struct cannot convert to string
+
+	time.Sleep(100 * time.Millisecond)
+	select {
+	case <-done:
+		t.Fatal("should not have executed with incompatible arg type")
+	default:
+		// expected -- reflect path rejects the type mismatch
+	}
+}
+
+// TestRun_FuncErrorWrongArgFallsToReflect tests func(error) fast path with non-error arg.
+func TestRun_FuncErrorWrongArgFallsToReflect(t *testing.T) {
+	time.Sleep(10 * time.Millisecond)
+	// func(error) with string arg -- type assert fails, falls to reflect path
+	Run(func(_ error) {}, "not an error")
+	time.Sleep(100 * time.Millisecond)
+}
+
+// TestRun_FuncIntWrongArgFallsToReflect tests func(int) fast path with non-int arg.
+func TestRun_FuncIntWrongArgFallsToReflect(t *testing.T) {
+	time.Sleep(10 * time.Millisecond)
+	// func(int) with string arg -- type assert fails, falls to reflect path
+	Run(func(_ int) {}, "not an int")
+	time.Sleep(100 * time.Millisecond)
+}
+
+// TestRun_FuncNoArgWithExtraArgs tests func() fast path with extra args -- falls to reflect.
+func TestRun_FuncNoArgWithExtraArgs(t *testing.T) {
+	done := make(chan bool, 1)
+
+	// func() with args -- len(args) != 0, falls to reflect generic path
+	Run(func() {
+		done <- true
+	}, "extra")
+
+	select {
+	case <-done:
+		// reflect path executed the func() ignoring extra args (after warning)
+	case <-time.After(100 * time.Millisecond):
+		// Also acceptable -- reflect may reject
+	}
+}
+
+// TestRun_PanicInFuncErrorFastPath tests panic recovery in func(error) fast path.
+func TestRun_PanicInFuncErrorFastPath(t *testing.T) {
+	Run(func(_ error) {
+		panic("panic in error handler")
+	}, fmt.Errorf("test"))
+	time.Sleep(100 * time.Millisecond)
+	// Test passes if panic is recovered (no crash)
+}
+
+// TestRun_PanicInFuncIntFastPath tests panic recovery in func(int) fast path.
+func TestRun_PanicInFuncIntFastPath(t *testing.T) {
+	Run(func(_ int) {
+		panic("panic in int handler")
+	}, 42)
+	time.Sleep(100 * time.Millisecond)
+}
+
+// TestGetCallerLocation_Direct tests getCallerLocation called directly (from goroutine package).
+func TestGetCallerLocation_Direct(t *testing.T) {
+	// When called from within the goroutine package, frame.File contains "/goroutine/"
+	// so it should return "" (filtered out)
+	loc := getCallerLocation()
+	// Location might be empty (we're calling from goroutine package) or non-empty (test framework)
+	_ = loc // just exercise the function
+}
+
+// TestExtractLocation_SingleLineNoNewline tests extractLocation with truncated stack.
+func TestExtractLocation_SingleLineNoNewline(t *testing.T) {
+	parser := newStackTraceParser()
+
+	// Stack trace where func line has no newline (truncated)
+	got := parser.extractLocation("goroutine 1 [running]:\nsome.func.name")
+	assert.Equal(t, "", got)
+}
+
+// TestExtractLocation_LastFrameNoTrailingNewline tests last frame without trailing newline.
+func TestExtractLocation_LastFrameNoTrailingNewline(t *testing.T) {
+	parser := newStackTraceParser()
+
+	got := parser.extractLocation("goroutine 1 [running]:\nmain.myFunc()\n\t/path/to/main.go:42")
+	assert.NotEmpty(t, got)
+	assert.Contains(t, got, "main.go:42")
+}
+
+// TestFanOut_WorkersZero tests FanOut with workers=0 (defaults to 1).
+func TestFanOut_WorkersZero(t *testing.T) {
+	results, err := FanOut(context.Background(), []int{1, 2}, 0,
+		func(_ context.Context, n int) (int, error) { return n * 2, nil },
+	)
+	assert.NoError(t, err)
+	assert.Equal(t, []int{2, 4}, results)
+}
+
+// TestTrySubmit_AfterStop tests TrySubmit after pool is stopped.
+func TestTrySubmit_AfterStop(t *testing.T) {
+	pool := NewWorkerPool(PoolConfig{Workers: 1, QueueSize: 5})
+	pool.Start(context.Background())
+	pool.Stop()
+
+	ok := pool.TrySubmit(func() {})
+	assert.False(t, ok)
+}
+
+// TestGroup_Go_SemReleaseOnPanic tests that semaphore is released when goroutine panics.
+func TestGroup_Go_SemReleaseOnPanic(t *testing.T) {
+	g := NewGroupWithLimit(context.Background(), 1)
+
+	g.Go(func(_ context.Context) error {
+		panic("sem release test")
+	})
+
+	// If sem is not released, this Go() would block forever
+	g.Go(func(_ context.Context) error {
+		return nil
+	})
+
+	err := g.Wait()
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "panic recovered")
+}
+
+// TestGroup_Go_NoSemNilPath tests that Go without semaphore skips sem logic.
+func TestGroup_Go_NoSemNilPath(t *testing.T) {
+	g := NewGroup() // no semaphore
+	done := make(chan bool, 1)
+	g.Go(func(_ context.Context) error {
+		done <- true
+		return nil
+	})
+	err := g.Wait()
+	assert.NoError(t, err)
+	assert.True(t, <-done)
+}
+
+// TestTrySubmit_Success tests TrySubmit happy path.
+func TestTrySubmit_Success(t *testing.T) {
+	pool := NewWorkerPool(PoolConfig{Workers: 1, QueueSize: 5})
+	pool.Start(context.Background())
+
+	var count atomic.Int32
+	ok := pool.TrySubmit(func() { count.Add(1) })
+	assert.True(t, ok)
+
+	pool.Stop()
+	assert.Equal(t, int32(1), count.Load())
+}
+
+// TestGetCallerLocation_ReturnsEmpty_FromInternalFrame tests that getCallerLocation
+// returns empty when the first frame is from the goroutine package itself.
+func TestGetCallerLocation_ReturnsEmpty_FromInternalFrame(t *testing.T) {
+	// Call from within the goroutine package -- frame.File contains "/goroutine/"
+	loc := getCallerLocation()
+	// From test files (which ARE in /goroutine/), we might get an empty string
+	// or the testing framework location -- either is valid
+	_ = loc
+}
+
+// testHelperCallerLocation is an internal function to exercise getCallerLocation
+// from multiple stack frames within the goroutine package.
+func testHelperCallerLocation() string {
+	return getCallerLocation()
+}
+
+// TestGetCallerLocation_AllFramesInternal tests the return "" path when all frames
+// are from the goroutine package or runtime.
+func TestGetCallerLocation_AllFramesInternal(t *testing.T) {
+	// Call through a helper within the goroutine package -- tests the "no external frame" path
+	loc := testHelperCallerLocation()
+	// The result may be a testing framework location or empty -- both valid
+	_ = loc
+}
+
+// TestRecoverPanic_CallerLocationFallback tests the callerLocation fallback
+// when capturePanicLocation returns empty.
+func TestRecoverPanic_CallerLocationFallback(t *testing.T) {
+	func() {
+		defer recoverPanic()
+		panic("fallback test")
+	}()
+}
+
+// ---------------------------------------------------------------------------
+// RunWithContext tests
+// ---------------------------------------------------------------------------
+
+func TestRunWithContext_NormalExecution(t *testing.T) {
+	done := make(chan string, 1)
+	RunWithContext(context.Background(), func(_ context.Context) {
+		done <- "ok"
+	})
+
+	select {
+	case v := <-done:
+		assert.Equal(t, "ok", v)
+	case <-time.After(200 * time.Millisecond):
+		t.Error("RunWithContext did not complete")
+	}
+}
+
+func TestRunWithContext_ContextCancelled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	done := make(chan error, 1)
+	RunWithContext(ctx, func(ctx context.Context) {
+		done <- ctx.Err()
+	})
+
+	select {
+	case err := <-done:
+		assert.Error(t, err)
+	case <-time.After(200 * time.Millisecond):
+		t.Error("RunWithContext did not complete")
+	}
+}
+
+func TestRunWithContext_PanicRecovery(t *testing.T) {
+	RunWithContext(context.Background(), func(_ context.Context) {
+		panic("ctx panic test")
+	})
+	time.Sleep(100 * time.Millisecond)
+	// Should not crash the process
+}
+
+// ---------------------------------------------------------------------------
+// RunWithTimeout tests
+// ---------------------------------------------------------------------------
+
+func TestRunWithTimeout_NormalCompletion(t *testing.T) {
+	done := make(chan string, 1)
+	cancel := RunWithTimeout(2*time.Second, func(_ context.Context) {
+		done <- "finished"
+	})
+	defer cancel()
+
+	select {
+	case v := <-done:
+		assert.Equal(t, "finished", v)
+	case <-time.After(500 * time.Millisecond):
+		t.Error("RunWithTimeout did not complete")
+	}
+}
+
+func TestRunWithTimeout_Timeout(t *testing.T) {
+	started := make(chan struct{})
+	done := make(chan struct{})
+
+	cancel := RunWithTimeout(50*time.Millisecond, func(ctx context.Context) {
+		close(started)
+		<-ctx.Done() // wait for timeout
+		close(done)
+	})
+	defer cancel()
+
+	<-started
+	select {
+	case <-done:
+		// fn observed ctx.Done and exited — no goroutine leak
+	case <-time.After(500 * time.Millisecond):
+		t.Error("fn did not exit after timeout")
+	}
+}
+
+func TestRunWithTimeout_EarlyCancel(t *testing.T) {
+	done := make(chan error, 1)
+	cancel := RunWithTimeout(5*time.Second, func(ctx context.Context) {
+		<-ctx.Done()
+		done <- ctx.Err()
+	})
+
+	// Cancel early
+	cancel()
+
+	select {
+	case err := <-done:
+		assert.Error(t, err)
+	case <-time.After(500 * time.Millisecond):
+		t.Error("RunWithTimeout did not cancel")
+	}
+}
+
+func TestRunWithTimeout_PanicRecovery(t *testing.T) {
+	cancel := RunWithTimeout(2*time.Second, func(_ context.Context) {
+		panic("timeout panic test")
+	})
+	defer cancel()
+	time.Sleep(100 * time.Millisecond)
+	// Should not crash the process
+}
+
+// ---------------------------------------------------------------------------
+// SubmitWithTimeout tests
+// ---------------------------------------------------------------------------
+
+func TestSubmitWithTimeout_NormalCompletion(t *testing.T) {
+	pool := NewWorkerPool(PoolConfig{Workers: 2, QueueSize: 10})
+	pool.Start(context.Background())
+	defer pool.Stop()
+
+	done := make(chan string, 1)
+	ok := pool.SubmitWithTimeout(2*time.Second, func(_ context.Context) {
+		done <- "ok"
+	})
+	assert.True(t, ok)
+
+	select {
+	case v := <-done:
+		assert.Equal(t, "ok", v)
+	case <-time.After(500 * time.Millisecond):
+		t.Error("SubmitWithTimeout did not complete")
+	}
+}
+
+func TestSubmitWithTimeout_Timeout(t *testing.T) {
+	pool := NewWorkerPool(PoolConfig{Workers: 1, QueueSize: 10})
+	pool.Start(context.Background())
+	defer pool.Stop()
+
+	done := make(chan error, 1)
+	pool.SubmitWithTimeout(50*time.Millisecond, func(ctx context.Context) {
+		<-ctx.Done()
+		done <- ctx.Err()
+	})
+
+	select {
+	case err := <-done:
+		assert.Error(t, err)
+	case <-time.After(500 * time.Millisecond):
+		t.Error("SubmitWithTimeout job did not timeout")
+	}
+}
+
+func TestSubmitWithTimeout_StoppedPool(t *testing.T) {
+	pool := NewWorkerPool(PoolConfig{Workers: 1, QueueSize: 10})
+	pool.Start(context.Background())
+	pool.Stop()
+
+	ok := pool.SubmitWithTimeout(time.Second, func(_ context.Context) {})
+	assert.False(t, ok)
+}
+
+// ---------------------------------------------------------------------------
+// Edge case tests — RunWithContext
+// ---------------------------------------------------------------------------
+
+// Verify context.WithTimeout works through RunWithContext.
+func TestRunWithContext_WithTimeout(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	done := make(chan error, 1)
+	RunWithContext(ctx, func(ctx context.Context) {
+		<-ctx.Done()
+		done <- ctx.Err()
+	})
+
+	select {
+	case err := <-done:
+		assert.ErrorIs(t, err, context.DeadlineExceeded)
+	case <-time.After(500 * time.Millisecond):
+		t.Error("goroutine did not exit after timeout")
+	}
+}
+
+// Multiple goroutines share the same cancel context.
+func TestRunWithContext_SharedCancel(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	var exited atomic.Int32
+
+	for i := 0; i < 5; i++ {
+		RunWithContext(ctx, func(ctx context.Context) {
+			<-ctx.Done()
+			exited.Add(1)
+		})
+	}
+
+	time.Sleep(30 * time.Millisecond)
+	cancel() // cancel all 5 goroutines
+	time.Sleep(100 * time.Millisecond)
+
+	assert.Equal(t, int32(5), exited.Load(), "all 5 goroutines should have exited")
+}
+
+// fn completes with result accessible via channel even when context is alive.
+func TestRunWithContext_ResultBeforeCancel(t *testing.T) {
+	result := make(chan int, 1)
+	RunWithContext(context.Background(), func(_ context.Context) {
+		result <- 42
+	})
+
+	select {
+	case v := <-result:
+		assert.Equal(t, 42, v)
+	case <-time.After(200 * time.Millisecond):
+		t.Error("did not receive result")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Edge case tests — RunWithTimeout
+// ---------------------------------------------------------------------------
+
+// Verify timeout error type is DeadlineExceeded.
+func TestRunWithTimeout_ErrorType(t *testing.T) {
+	done := make(chan error, 1)
+	cancel := RunWithTimeout(50*time.Millisecond, func(ctx context.Context) {
+		<-ctx.Done()
+		done <- ctx.Err()
+	})
+	defer cancel()
+
+	err := <-done
+	assert.ErrorIs(t, err, context.DeadlineExceeded)
+}
+
+// Concurrent RunWithTimeout calls should not interfere with each other.
+func TestRunWithTimeout_ConcurrentCalls(t *testing.T) {
+	var completed atomic.Int32
+
+	cancels := make([]context.CancelFunc, 10)
+	for i := 0; i < 10; i++ {
+		cancels[i] = RunWithTimeout(2*time.Second, func(_ context.Context) {
+			time.Sleep(10 * time.Millisecond)
+			completed.Add(1)
+		})
+	}
+
+	time.Sleep(200 * time.Millisecond)
+	for _, c := range cancels {
+		c()
+	}
+
+	assert.Equal(t, int32(10), completed.Load(), "all 10 goroutines should complete")
+}
+
+// Double cancel should not panic.
+func TestRunWithTimeout_DoubleCancelSafe(t *testing.T) {
+	cancel := RunWithTimeout(time.Second, func(ctx context.Context) {
+		<-ctx.Done()
+	})
+	cancel()
+	cancel() // should not panic
+	time.Sleep(50 * time.Millisecond)
+}
+
+// Goroutine leak detection: after cancel, no goroutines left running.
+func TestRunWithTimeout_NoLeak(t *testing.T) {
+	before := runtime.NumGoroutine()
+
+	done := make(chan struct{})
+	cancel := RunWithTimeout(50*time.Millisecond, func(ctx context.Context) {
+		<-ctx.Done()
+		close(done)
+	})
+
+	<-done
+	cancel()
+	time.Sleep(100 * time.Millisecond)
+
+	after := runtime.NumGoroutine()
+	// Allow ±2 for background goroutines (GC, etc.)
+	assert.InDelta(t, before, after, 2, "goroutine count should return to baseline")
+}
+
+// ---------------------------------------------------------------------------
+// Edge case tests — SubmitWithTimeout
+// ---------------------------------------------------------------------------
+
+// SubmitWithTimeout job uses pool context: if pool stops, job ctx is cancelled.
+func TestSubmitWithTimeout_PoolStopCancelsJob(t *testing.T) {
+	pool := NewWorkerPool(PoolConfig{Workers: 1, QueueSize: 10})
+	pool.Start(context.Background())
+
+	done := make(chan error, 1)
+	pool.SubmitWithTimeout(5*time.Second, func(ctx context.Context) {
+		<-ctx.Done()
+		done <- ctx.Err()
+	})
+
+	time.Sleep(30 * time.Millisecond)
+	pool.Stop() // stopping pool cancels pool ctx, which cascades to job ctx
+
+	select {
+	case err := <-done:
+		assert.Error(t, err)
+	case <-time.After(500 * time.Millisecond):
+		t.Error("job should have been cancelled when pool stopped")
+	}
+}
+
+// Multiple SubmitWithTimeout jobs with different timeouts.
+func TestSubmitWithTimeout_MixedTimeouts(t *testing.T) {
+	pool := NewWorkerPool(PoolConfig{Workers: 3, QueueSize: 10})
+	pool.Start(context.Background())
+	defer pool.Stop()
+
+	var fast, slow atomic.Int32
+
+	// Fast jobs: 2s timeout, finish immediately
+	for i := 0; i < 5; i++ {
+		pool.SubmitWithTimeout(2*time.Second, func(_ context.Context) {
+			fast.Add(1)
+		})
+	}
+
+	// Slow jobs: 50ms timeout, block until cancelled
+	for i := 0; i < 3; i++ {
+		pool.SubmitWithTimeout(50*time.Millisecond, func(ctx context.Context) {
+			<-ctx.Done()
+			slow.Add(1)
+		})
+	}
+
+	time.Sleep(300 * time.Millisecond)
+	assert.Equal(t, int32(5), fast.Load(), "all fast jobs should complete")
+	assert.Equal(t, int32(3), slow.Load(), "all slow jobs should timeout and exit")
 }

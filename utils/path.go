@@ -6,7 +6,22 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 )
+
+var (
+	cachedModuleRoot     string
+	cachedModuleRootOnce sync.Once
+)
+
+// getCachedModuleRoot returns the cached module root for the given file path.
+// It caches the result from the first call to avoid repeated filesystem walks in hot paths.
+func getCachedModuleRoot(filePath string) string {
+	cachedModuleRootOnce.Do(func() {
+		cachedModuleRoot = FindModuleRoot(filePath)
+	})
+	return cachedModuleRoot
+}
 
 // GetShortPath converts absolute file path to short format relative to module root.
 //
@@ -29,8 +44,8 @@ import (
 //	// Returns: "example/handler/controller/handler.go" (relative to module root)
 func GetShortPath(fullPath string) string {
 	// Strategy 1: Find Go module root (directory containing go.mod) and return relative path
-	if moduleRoot := FindModuleRoot(fullPath); moduleRoot != "" {
-		if rel, err := filepath.Rel(moduleRoot, fullPath); err == nil {
+	if moduleRoot := getCachedModuleRoot(fullPath); moduleRoot != "" {
+		if rel, err := filepath.Rel(moduleRoot, fullPath); err == nil && !strings.HasPrefix(rel, "..") {
 			// Normalize path separators to forward slashes for consistency
 			return filepath.ToSlash(rel)
 		}

@@ -47,41 +47,38 @@ func GetPanicLocation() (location string, err error) {
 
 	frames := runtime.CallersFrames(pcs[:n])
 
-	var allFrames []runtime.Frame
-	recoverFrameIdx := -1
+	// Single-pass: find recover frame, then first user frame after it.
+	recoverFound := false
+	var recoverFile string
+	var recoverLine int
 
 	for {
 		frame, more := frames.Next()
-		allFrames = append(allFrames, frame)
+
+		if !recoverFound {
+			// Looking for the recover frame (anonymous defer function)
+			if !isSystemFrame(frame.File) && strings.Contains(frame.Function, ".func") {
+				recoverFound = true
+				recoverFile = frame.File
+				recoverLine = frame.Line
+			}
+		} else {
+			// Looking for first user frame after recover frame
+			if !isSystemFrame(frame.File) {
+				if frame.File != recoverFile || frame.Line != recoverLine {
+					shortPath := GetShortPath(frame.File)
+					return fmt.Sprintf("%s:%d", shortPath, frame.Line), nil
+				}
+			}
+		}
+
 		if !more {
 			break
 		}
 	}
 
-	// Find recover frame (anonymous defer function)
-	for i, frame := range allFrames {
-		if !isSystemFrame(frame.File) && strings.Contains(frame.Function, ".func") {
-			recoverFrameIdx = i
-			break
-		}
-	}
-
-	if recoverFrameIdx == -1 {
+	if !recoverFound {
 		return "", fmt.Errorf("not in panic context (recover frame not found)")
-	}
-
-	// Find first user frame after recover frame
-	for i := recoverFrameIdx + 1; i < len(allFrames); i++ {
-		frame := allFrames[i]
-		if isSystemFrame(frame.File) {
-			continue
-		}
-		recoverFrame := allFrames[recoverFrameIdx]
-		if frame.File == recoverFrame.File && frame.Line == recoverFrame.Line {
-			continue
-		}
-		shortPath := GetShortPath(frame.File)
-		return fmt.Sprintf("%s:%d", shortPath, frame.Line), nil
 	}
 
 	return "", fmt.Errorf("panic context found but no user frame detected")
