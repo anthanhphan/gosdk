@@ -53,6 +53,12 @@ tidy:
 	@go mod tidy
 	@go mod verify
 
+update:
+	@echo "Updating all Go packages to latest versions..."
+	@go get -u ./...
+	@go mod tidy
+	@go mod verify
+	@echo "All packages updated successfully."
 
 # ------------------------------
 # Tests & Coverage
@@ -97,7 +103,7 @@ lint:
 
 staticcheck:
 	@echo "Running staticcheck..."
-	@$(STATICCHECK) -go 1.25.2 ./...
+	@$(STATICCHECK) -go 1.26.1 ./...
 
 ineffassign:
 	@echo "Checking for ineffectual assignments..."
