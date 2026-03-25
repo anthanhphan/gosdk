@@ -405,3 +405,60 @@ func decryptMaskedValue(encrypted, key string) (string, error) {
 
 	return string(plaintext), nil
 }
+
+type testCoverageUnexported struct {
+	Exported   string
+	unexported int
+}
+
+type testCoverageTags struct {
+	OmitField   string `log:"-"`
+	MaskField   string `log:"mask"`
+	NormalField string
+}
+
+type testCoverageEmbedded struct {
+	testCoverageTags
+	Ptr    *testCoverageTags
+	NilPtr *testCoverageTags
+}
+
+func TestLogger_sensitiveStruct_Coverage(t *testing.T) {
+	logger := NewLogger(&Config{
+		LogLevel:    LevelInfo,
+		LogEncoding: EncodingJSON,
+		MaskKey:     "1234567890123456", // 16 bytes for valid AES
+	}, []io.Writer{io.Discard})
+
+	ts := testCoverageEmbedded{
+		testCoverageTags: testCoverageTags{
+			OmitField:   "hidden",
+			MaskField:   "secret1",
+			NormalField: "visible1",
+		},
+		Ptr: &testCoverageTags{
+			OmitField:   "hidden",
+			MaskField:   "secret2",
+			NormalField: "visible2",
+		},
+		NilPtr: nil,
+	}
+
+	logger.Infow("struct test", "data", ts)
+
+	// Test invalid mask key length
+	logger2 := NewLogger(&Config{
+		LogLevel: LevelInfo,
+		MaskKey:  "short", // Invalid AES key length
+	}, []io.Writer{io.Discard})
+	logger2.Infow("invalid key test", "data", ts)
+
+	// Test unexported fields
+	unexported := testCoverageUnexported{
+		Exported:   "visible",
+		unexported: 123,
+	}
+	logger.Infow("unexported test", "data", unexported)
+
+	logger.Sync()
+}

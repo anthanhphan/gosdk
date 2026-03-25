@@ -3,6 +3,8 @@
 package logger
 
 import (
+	"bytes"
+	"io"
 	"os"
 	"os/exec"
 	"testing"
@@ -464,4 +466,19 @@ func TestAsyncFatalf(t *testing.T) {
 	defer func() { _ = al.Close() }()
 
 	al.Fatalf("fatal error: %s", "test")
+}
+
+func TestLogger_Async_Coverage(t *testing.T) {
+	var buf bytes.Buffer
+	baseLogger := NewLogger(&Config{
+		LogLevel:    LevelInfo,
+		LogEncoding: EncodingJSON,
+	}, []io.Writer{AddSync(&buf)})
+
+	asyncLogger := NewAsyncLogger(baseLogger, 100)
+	asyncLogger.Info("async test 1")
+	asyncLogger.Debug("async debug") // Should not log, covers async shouldLog checks
+
+	// Flush queue
+	asyncLogger.Close()
 }
