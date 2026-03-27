@@ -124,7 +124,7 @@ cyclo:
 security_scan:
 	@echo "Running gosec security scan..."
 	@mkdir -p $(REPORT_DIR)
-	@$(GOSEC) -fmt json -out $(SECURITY_JSON) -exclude-generated ./... 2>/dev/null
+	@$(GOSEC) -fmt json -out $(SECURITY_JSON) -exclude-generated -exclude-dir=orianna/docs ./... 2>/dev/null
 	@echo "Security report generated at: $(SECURITY_JSON)"
 
 vul:
