@@ -24,6 +24,7 @@ GoSDK provides essential packages that make Go development easier and faster:
 | **[jcodec](./jcodec)** | Fast JSON encoding/decoding | Auto-selects Sonic (AMD64) or goccy (ARM64), 1.5–5× faster than `encoding/json` |
 | **[logger](./logger)** | Structured logging | 2.5M logs/sec, 2 allocs/op, async output, zap-level performance |
 | **[metrics](./metrics)** | Application metrics | Prometheus counters/gauges/histograms, isolated registries, built-in HTTP handler |
+| **[redis](./redis)** | Observable Redis client | Standalone + Sentinel, auto Prometheus metrics + structured logging per command |
 | **[tracing](./tracing)** | Distributed tracing | OpenTelemetry with OTLP export to Tempo, Jaeger, or any OTLP collector |
 | **[validator](./validator)** | Struct validation | Tag-based rules, zero-alloc after first call, nested struct + slice dive support |
 | **[goroutine](./goroutine)** | Safe concurrent code | Run, Group, FanOut, ForEach, WorkerPool — all with auto panic recovery |
@@ -103,6 +104,7 @@ go run logger/docs/example/main.go
 go run jcodec/docs/example/main.go
 go run metrics/docs/example/main.go
 go run goroutine/docs/example/main.go
+go run redis/docs/example/main.go
 ```
 
 ---
@@ -437,6 +439,45 @@ config := conflux.MustLoad[Config]("config.yaml")
 
 ---
 
+### redis — Observable Redis Client
+
+Redis client wrapper built on [go-redis v9](https://github.com/redis/go-redis). Supports **Standalone** and **Sentinel** modes. Every command is automatically instrumented with Prometheus metrics and structured error logging. The `ScopedClient` API removes boilerplate action labeling from service methods.
+
+```go
+import "github.com/anthanhphan/gosdk/redis"
+
+// Connect (validates config, applies defaults, pings)
+client, err := redis.NewClient(&redis.Config{
+    Addr:            "localhost:6379",
+    MetricNamespace: "myapp",
+}, log)
+defer client.Close()
+
+// ScopedClient — define scope once, label every command automatically
+scoped := client.Scope("user_svc")
+
+val, err := client.Get(scoped.Ctx(ctx, "get_session"), "session:u-1").Result()
+// Prometheus: action="user_svc.get_session", command="get"
+
+client.Set(scoped.Ctx(ctx, "set_session"), "session:u-1", token, time.Hour)
+// Prometheus: action="user_svc.set_session", command="set"
+
+// Load from config file via conflux
+cfg, _ := conflux.Load[redis.Config]("config/redis.yaml")
+client, err = redis.NewClient(cfg, log)
+```
+
+**Metrics registered automatically:**
+
+| Metric | Type | Labels |
+|---|---|---|
+| `<namespace>_command_duration_seconds` | Histogram | `action`, `command` |
+| `<namespace>_command_errors_total` | Counter | `action`, `command`, `error_type` |
+
+[Full docs](./redis/docs/README.md) • [Examples](./redis/docs/example/main.go)
+
+---
+
 ### utils — Common Utilities
 
 Secure helpers for file I/O, environment detection, and panic location tracking.
@@ -494,6 +535,7 @@ gosdk/
 ├── validator/               # Struct validation engine
 ├── goroutine/               # Concurrency patterns (Run, Group, FanOut, ForEach)
 ├── conflux/                 # Configuration loader (JSON/YAML)
+├── redis/                   # Observable Redis client (Standalone + Sentinel)
 └── utils/                   # File I/O, environment, panic tracking
 ```
 
